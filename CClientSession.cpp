@@ -2,8 +2,9 @@
 
 #include <string>
 #include <iostream>
-#include <glog/logging.h>
 #include <algorithm>
+
+#include "glog/logging.h"
 
 boost::recursive_mutex clients_cs;
 typedef boost::shared_ptr<CClientSession> client_ptr;
@@ -12,18 +13,22 @@ cli_ptr_vector clients;
 
 void CClientSession::start()
 {
+	started_ = true;
+
 	{
 		boost::recursive_mutex::scoped_lock lk(clients_cs);
 		clients.push_back(shared_from_this());
 	}
 
-	boost::recursive_mutex::scoped_lock lk(cs_);
-	started_ = true;
+	db = CSQLiteDB::new_();
+	LOG_IF(WARNING, ! db->OpenConnection(dbPath, busyTimeout)) << "ERROR: can't connect to db: " <<db->GetLastError();
+	db->Excute(string("PRAGMA journal_mode = WAL; PRAGMA encoding = \"UTF-8\"; "
+	           "PRAGMA foreign_keys = 1; PRAGMA page_size = " + std::to_string(blockOrClusterSize) + "; PRAGMA cache_size = 2000;").c_str());
+
 	last_ping_ = boost::posix_time::microsec_clock::local_time();
 
-	// first, we wait for client to login
+	// first, we send 'ping OK' and wait for client to login
 	on_ping();
-	//do_read();
 }
 
 CClientSession::ptr CClientSession::new_(io_context& io_context)
@@ -91,11 +96,14 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 	// process the msg]
 
 	// we must make copy of read_buffer_, for quick unlock cs_ mutex
-	string inMsg(strlen(read_buffer_.get()) - sizeEndOfMsg, char(0));
+    size_t len = strlen(read_buffer_.get()) - sizeEndOfMsg;
+    LOG_IF(INFO,(len <7)||len>max_msg) <<"LENGH" <<len;
+	string inMsg(len, char(0));
 	size_t cleanMsgSize = 0;
 	{
 		boost::recursive_mutex::scoped_lock lk(cs_);
         for (size_t i=0; i < inMsg.size(); ++i) {
+            //continue if read_buffer_[i] == one of (\r, \n, NULL)
         	if((read_buffer_[i] != char(0)) && (read_buffer_[i] != char(13))  && (read_buffer_[i] != char(10)))
 			    inMsg[cleanMsgSize++] = read_buffer_[i];
         }
@@ -103,8 +111,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 	inMsg.resize(cleanMsgSize);
 
 
-	VLOG(1) << "DEBUG: received msg: '" << inMsg;
-	VLOG(1)	<< " DEBUG: received bytes: " << bytes;
+	VLOG(1) << "DEBUG: received msg '" << inMsg <<"'\n"	<< " DEBUG: received bytes from user '" <<username() <<"': " << bytes;
 
 	if(0 == inMsg.find(u8"login ")){
 		on_login(inMsg);
@@ -118,10 +125,15 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 	else if(0 == inMsg.find(u8"fibo ")){
 		on_fibo(inMsg);
 	}
-	else {
+	else if(0 == inMsg.find(u8"exit")){
+		stop();
+	}
+	else if(inMsg.size() > 10) {
 		on_query(inMsg);
-		//do_write(/*string(u8"FAIL: very short command:") + */inMsg + "\n");
-		//LOG(WARNING) << "very short command from client " << username() << ": '" << inMsg << '\'';
+	}
+	else{
+		do_write(string(u8"ERROR: very short command:") + inMsg + "\n");
+		LOG(WARNING) << "very short command from client " << username() << ": '" << inMsg << '\'';
 	}
 
 }
@@ -168,25 +180,16 @@ void CClientSession::on_clients()
 	do_write(string("clients: " + msg + "\n"));
 }
 
-//void do_ping()
-//{
-//	do_write("ping\n");
-//}
-
-//void do_ask_clients()
-//{
-//	do_write("ask_clients\n");
-//}
-
 void CClientSession::on_check_ping()
 {
 	boost::recursive_mutex::scoped_lock lk(cs_);
 	boost::posix_time::ptime now = boost::posix_time::microsec_clock::local_time();
-	if( (now - last_ping_).total_milliseconds() > max_timeout )
-	{
+
+	if( (now - last_ping_).total_milliseconds() >= (max_timeout-1) ){
 		VLOG(1) << "DEBUG: stopping: " << username_ << " - no ping in time" << std::endl;
 		stop();
 	}
+
 	last_ping_ = boost::posix_time::microsec_clock::local_time();
 }
 
@@ -202,7 +205,7 @@ void CClientSession::on_write(const error_code &err, size_t bytes)
 	do_read();
 }
 
-void CClientSession::do_get_fibo(const size_t n)
+void CClientSession::do_get_fibo(const size_t &n)
 {
 	//return n<=2 ? n: get_fibo(n-1) + get_fibo(n-2);
 	size_t a = 1, b = 1;
@@ -230,36 +233,82 @@ void CClientSession::on_fibo(const string &msg)
 
 
 
-void CClientSession::do_ask_db(const string query)
+void CClientSession::do_ask_db(string &query)
 {
-	string answer;
+	if( ! started() )
+		return;
 
-	// try to connect to ODBC driver
-	/*ODBCDatabase::CDatabase db(L";,;");
+	string answer("");
 
-	// if connected, send query to db
-	if( db.ConnectedOk() )
 	{
-		db << query;
+		boost::recursive_mutex::scoped_lock bd_;
 
-		// get answer from db
-		db >> answer;
-	}*/
+		if(! db->isConnected()){
+			if(! db->OpenConnection(dbPath, busyTimeout)){
+				answer = "ERROR: can't connect to db - " + db->GetLastError();
+				LOG(WARNING) << answer;
+			}
+		}
+		else{
+			//check if query is 'select' or 'insert/update...'
+			if((query.find("select") < 10) || (query.find("SELECT") < 10)){
+				//Get Data From DB
+				IResult *res = db->ExcuteSelect(query.c_str());
 
-	for (int i = 0; i < 10000; ++i) {
-		i;
+				if (nullptr == res){
+					answer = "ERROR: " + db->GetLastError();
+					LOG(WARNING) << answer;
+				}
+				else {
+					//Colomn Name
+					/*for (int i = 0; i < db->GetColumnCount(); ++i) {
+							const char *tmpRes = res->NextColomnName(i);
+							answer += (tmpRes ? std::move(string(tmpRes)): "NULL")+ separator;
+					}
+					answer += '\n';*/
+
+					//Data
+					while (res->Next()) {
+						for (int i = 0; i < db->GetColumnCount(); i++){
+							const char *tmpRes = res->ColomnData(i);
+							answer += (tmpRes ? std::move(string(tmpRes)): "NULL")+ separator;
+
+						}
+						answer.resize(answer.size() - 1);
+						answer += '\n';
+					}
+					//release Result Data
+					res->Release();
+
+					if(answer.empty())
+						answer = "EMPTY";
+				}
+			}
+			else{
+				db->BeginTransaction();
+				int effectedData =  db->Excute(query.c_str());
+				db->CommitTransection();
+
+				if (effectedData < 0){
+					answer = "ERROR: " + db->GetLastError();
+					LOG(WARNING) << answer;
+				}
+				else{
+					answer = "OK: count of effected data - " + std::to_string(effectedData);
+				}
+			}
+		}
 	}
-
-
-	do_write(answer+"\n");
+	//VLOG(1) <<answer;
+	do_write(answer+endOfMsg);
 }
 
-void CClientSession::on_query(const string msg)
+void CClientSession::on_query(const string &msg)
 {
+	if( !started() )
+		return;
 
-	//io_context_.post(boost::bind(&CClientSession::do_ask_db, shared_from_this(), msg));
-    auto self = shared_from_this();
-	io_context_.post([self, this, &msg](){ do_ask_db(msg); });
+    io_context_.post(boost::bind(&CClientSession::do_ask_db, shared_from_this(), msg));
 
 	do_read();
 }
@@ -268,20 +317,18 @@ void CClientSession::on_query(const string msg)
 
 void CClientSession::do_read()
 {
-	VLOG(1) << "DEBUG: do read" << std::endl;
+	//VLOG(1) << "DEBUG: do read" << std::endl;
 
-	ZeroMemory(read_buffer_.get(), sizeof(char) * max_msg);
+	{
+		boost::recursive_mutex::scoped_lock lk(cs_);
+		ZeroMemory(read_buffer_.get(), sizeof(char) * max_msg);
+	}
+
+	post_check_ping();
 
     sock_.async_receive(buffer(read_buffer_.get(), max_msg), 0,
-                        boost::bind(&CClientSession::on_read, shared_from_this(), _1, _2)
-    );
+                        boost::bind(&CClientSession::on_read, shared_from_this(), _1, _2));
 
-	/*async_read(sock_, buffer(read_buffer_.get(), max_msg),
-			   boost::bind(&CClientSession::read_complete, shared_from_this(), _1, _2),
-			   boost::bind(&CClientSession::on_read, shared_from_this(), _1, _2)
-	);*/
-
-	//post_check_ping();
 }
 
 void CClientSession::do_write(const string &msg)
@@ -290,36 +337,12 @@ void CClientSession::do_write(const string &msg)
 		return;
 
 	boost::recursive_mutex::scoped_lock lk(cs_);
+    ZeroMemory(write_buffer_.get(), sizeof(char) * max_msg);
 	std::copy(msg.begin(), msg.end(), write_buffer_.get());
 
 	sock_.async_write_some(buffer(write_buffer_.get(), msg.size()),
 						   boost::bind(&CClientSession::on_write, shared_from_this(), _1, _2));
 }
-
-size_t CClientSession::read_complete(const error_code &err, size_t bytes)
-{
-	if( err ) {
-		return 0;
-	}
-
-	string in(read_buffer_.get());
-	if(!in.empty()){
-	/*if(in.find("\0") < in.size())
-	    in.replace(in.find("\0"),1, "\\0");
-*/
-    VLOG(1) <<in <<"***bytes:" << bytes <<"***strlen" <<strlen(read_buffer_.get());}else {VLOG(1)<<"EMPTY";}
-	//bool found = strstr(read_buffer_, "\n") == read_buffer_ + bytes-1;
-	//bool found = strstr(read_buffer_, "!e\n") == read_buffer_ + bytes - 3;
-    auto read_buffer_begin = &read_buffer_[0];
-    auto read_buffer_end = &read_buffer_[0] + bytes* sizeof(read_buffer_.get());
-    bool found = std::search(read_buffer_begin, read_buffer_end, std::begin(endOfMsg), std::end(endOfMsg)) < read_buffer_end;
-	//bool found = std::find(read_buffer_, read_buffer_ + bytes, "!e\n") < read_buffer_ + bytes;
-	//bool found = std::find(read_buffer_.get(), &read_buffer_[0] + bytes, '<') < read_buffer_[0] + bytes;
-
-	// we read one-by-one until we get to enter, no buffering
-	return found ? 0 : 1;
-}
-
 
 void update_clients_changed()
 {

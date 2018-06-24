@@ -1,6 +1,6 @@
 #pragma once
-#ifndef _CRUNASYNC_
-#define _CRUNASYNC_
+#ifndef _CRUNASYNC_H
+#define _CRUNASYNC_H
 
 #include <boost/thread.hpp>
 #include <boost/bind.hpp>
@@ -56,4 +56,4 @@ private:
 	bool started_;
 	ptr self_;
 };
-#endif
+#endif //_CRUNASYNC_H

@@ -1,6 +1,6 @@
 #pragma once
-#ifndef _CCONFIG_
-#define _CCONFIG_
+#ifndef CS_MINISQLITESERVER_CCONFIG_H
+#define CS_MINISQLITESERVER_CCONFIG_H
 
 #include <string>
 
@@ -14,6 +14,9 @@ private:
         explicit KeyBindings(string exePath);
 
 		string dbPath;
+		long blockOrClusterSize;
+		long busyTimeout;
+
 		string ipAdress;
 		long port;
 		long threads;
@@ -64,4 +67,5 @@ private:
 	Status status = ERROR;
 	KeyBindings defaultKeyBindings;
 };
-#endif
+
+#endif //CS_MINISQLITESERVER_CCONFIG_H

@@ -1,15 +1,17 @@
-﻿//	#pragma once
-#include <glog/logging.h>
-#include <boost/asio.hpp>
+﻿#include <boost/asio.hpp>
+#include "glog/logging.h"
+#include "sqlite3/sqlite3.h"
 
 #include "main.h"
-//#include "CDatabase.h"
+#include "CSQLiteDB.h"
 #include "CServer.h"
 #include "CConfig.h"
 //#include "Service.h" //For Windows Service
 
 //Global variable declared in main.h
 std::string dbPath;
+int busyTimeout;
+long blockOrClusterSize;
 
 static int running_from_service = 0;
 
@@ -20,7 +22,7 @@ int main(int argc, char *argv[])
 	if( ! running_from_service )
 	{
 		cfg.Load();
-		LOG_IF(FATAL, CConfig::Status::ERROR == cfg.getStatus()) <<"An error was, while reading settings" ;
+		LOG_IF(FATAL, CConfig::Status::ERROR == cfg.getStatus()) <<"Check settings file" ;
 
 		running_from_service = 1;
 		/*if( service_register((LPWSTR)cfg.keyBindings.serviceName.c_str()) )
@@ -48,21 +50,13 @@ int main(int argc, char *argv[])
 	{
 		boost::asio::io_context io_context;
 
-		// try connect to db, to see if everything is ok with connection string
-		// and db is well configured
+		// try connect to db and check sqlite settings
+        TestSqlite3Settings(&cfg);
 
-		/*// try to connect to ODBC driver
-        auto db = new ODBCDatabase::CDatabase();
-
-        // if connected, ok, if not - exit with exeption
-        if( db->ConnectedOk() )
-        {
-            LOG(INFO) << "Connection to db was success";
-            delete db;
-        } else {
-            LOG(FATAL) << "Can't connect to db. Checconnection string in configuration file";
-        }*/
-
+        dbPath = cfg.keyBindings.dbPath;
+        blockOrClusterSize = cfg.keyBindings.blockOrClusterSize;
+        busyTimeout = static_cast<int>(cfg.keyBindings.busyTimeout);
+VLOG(1) <<blockOrClusterSize <<' ' <<busyTimeout;
         if(cfg.keyBindings.ipAdress.empty()){
             CServer Server(io_context, static_cast<unsigned short>(cfg.keyBindings.port),
 						   static_cast<unsigned short>(static_cast<short>(cfg.keyBindings.threads)));
@@ -77,6 +71,19 @@ int main(int argc, char *argv[])
 	}
 
 	return 0;
+}
+
+void TestSqlite3Settings(CConfig *cfg){
+
+    VLOG(1) <<"DEBUG: sqlite version: " <<sqlite3_version;
+	VLOG(1) <<"DEBUG: using db: " <<cfg->keyBindings.dbPath;
+
+    LOG_IF(FATAL, sqlite3_threadsafe() == 0 ) <<"Sqlite compiled without 'threadsafe' mode";
+
+    CSQLiteDB::ptr db = CSQLiteDB::new_();
+	LOG_IF(FATAL, ! db->OpenConnection(cfg->keyBindings.dbPath)) <<"Can't connect to db: " <<db->GetLastError();
+
+	VLOG(1) <<"DEBUG: connection to db checked - everything is OK";
 }
 
 void SafeExit()

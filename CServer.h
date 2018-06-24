@@ -1,6 +1,6 @@
 #pragma once
-#ifndef _CSERVER_
-#define _CSERVER_
+#ifndef CS_MINISQLITESERVER_CSERVER_H
+#define CS_MINISQLITESERVER_CSERVER_H
 
 #include "CClientSession.h"
 
@@ -40,4 +40,5 @@ private:
 	boost::thread_group threads;
 	short thread_num_;
 };
-#endif
+
+#endif //CS_MINISQLITESERVER_CSERVER_H

@@ -1,11 +1,10 @@
-﻿#ifndef _CCLIENTSESSION_
-#define _CCLIENTSESSION_
+﻿#ifndef CS_MINISQLITESERVER_CCLIENTSESSION_H
+#define CS_MINISQLITESERVER_CCLIENTSESSION_H
 #pragma once
 
 #include "main.h"
-#include "CRunAsync.h"
+#include "CSQLiteDB.h"
 
-//#include "CDatabase.h"
 #include <boost/bind.hpp>
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
@@ -77,27 +76,28 @@ private:
 
 	void on_write(const error_code &err, size_t bytes);
 
-		void do_get_fibo(const size_t n) ;
+		void do_get_fibo(const size_t &n) ;
 
 		void on_fibo(const string &msg);
 
-	void do_ask_db(const string query);
+	void do_ask_db(string &query);
 
-	void on_query(const string msg);
+	void on_query(const string &msg);
 
 	void do_read();
 
 	void do_write(const string &msg);
 
-	size_t read_complete(const error_code &err, size_t bytes);
+	//size_t read_complete(const error_code &err, size_t bytes);
 
 
 private:
 
 	mutable boost::recursive_mutex cs_;
-	enum{ max_msg = 20971520, max_timeout = 10000 };
-	static constexpr const char endOfMsg[] = {'<'};
-	static constexpr const size_t sizeEndOfMsg = countof(endOfMsg);
+	enum{ max_msg = 20971520, max_timeout = 30000 };
+	const char *endOfMsg = "\n";
+	const size_t sizeEndOfMsg = 1;
+	//const size_t sizeEndOfMsg = countof(endOfMsg);
 	scoped_array<char> read_buffer_;
 	scoped_array<char>  write_buffer_;
 	io_context &io_context_;
@@ -107,9 +107,12 @@ private:
 	boost::posix_time::ptime last_ping_;
 	deadline_timer timer_;
 
-	std::vector<std::pair<size_t,string>> res;
-	std::vector<std::pair<size_t, size_t>> fibo_res;
 	string username_;
 	bool clients_changed_;
+
+	mutable  boost::recursive_mutex db_;
+	CSQLiteDB::ptr db;
+	const char separator = '|';
 };
-#endif
+
+#endif //CS_MINISQLITESERVER_CCLIENTSESSION_H

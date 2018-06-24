@@ -6,15 +6,21 @@
 //#define GOOGLE_STRIP_LOG 0 // cut all glog strings from .exe
 
 #include <string>
+#include "CConfig.h"
 
 extern std::string dbPath;
+extern int busyTimeout;
+extern long blockOrClusterSize;
 
 int main(int argc, char *argv[]);
 
+void TestSqlite3Settings(CConfig *cfg);
+
 void SafeExit();
 
+/*
 template <typename T, std::size_t N>
 constexpr std::size_t countof(T const (&)[N]) noexcept
 {
     return N;
-}
+}*/

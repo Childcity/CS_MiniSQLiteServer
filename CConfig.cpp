@@ -4,7 +4,7 @@
 
 #include <ctime>
 #include <sys/stat.h>
-#include <glog/logging.h>
+#include "glog/logging.h"
 
 using INIWriter = samilton::INIWriter;
 
@@ -14,7 +14,10 @@ CConfig::KeyBindings::KeyBindings(const string exePath)
 	exeName_ = exePath.substr(found + 1);
 	exeFolderPath_ = exePath.substr(0, (exePath.size() - exeName_.size()));
 
-	dbPath = "defaultEmptyDb.sqlite3";
+	dbPath = exeFolderPath_ + "defaultEmptyDb.sqlite3";
+	blockOrClusterSize = 4096;
+	busyTimeout = 60000;
+
 	ipAdress = "127.0.0.1";
 	port = 65043;
 	threads = 10;
@@ -128,8 +131,10 @@ void CConfig::updateKeyBindings() {
 		keyBindings.port = settings.GetInteger("ServerSettings", "Port", -1L);
 		keyBindings.threads = settings.GetInteger("ServerSettings", "Threads", -1L);
 		keyBindings.ipAdress = settings.Get("ServerSettings", "IpAddress", "0");
-		//path to db
+		//DB settings
 		keyBindings.dbPath = settings.Get("DatabaseSettings", "PathToDatabaseFile", "_a");
+		keyBindings.blockOrClusterSize = settings.GetInteger("DatabaseSettings", "BlockOrClusterSize", -1L);
+		keyBindings.busyTimeout = settings.GetInteger("DatabaseSettings", "BusyTimeout", -1L);
 		//Log settings
 		keyBindings.logDir = settings.Get("LogSettings", "LogDir", "_a");
 		keyBindings.logToStdErr = settings.GetBoolean("LogSettings", "LogToStdErr", false);
@@ -139,8 +144,11 @@ void CConfig::updateKeyBindings() {
 		//Service settings (only for windows)
 		keyBindings.serviceName = settings.Get("ServiceSettings", "ServiceName", "_a");
 
-		if (keyBindings.port == -1L || keyBindings.threads == -1L || keyBindings.ipAdress == "0" || keyBindings.dbPath == "_a"
-			|| keyBindings.logDir == "_a" || keyBindings.serviceName == "_a" ) {
+		if (keyBindings.port <= 0L || keyBindings.threads <= 0L || keyBindings.ipAdress == "0"
+			|| keyBindings.blockOrClusterSize == -1L || keyBindings.busyTimeout <= 0L
+			|| keyBindings.dbPath == "_a" || keyBindings.dbPath.empty()
+			|| keyBindings.logDir == "_a" || keyBindings.logDir.empty()
+			|| keyBindings.serviceName == "_a" || keyBindings.serviceName.empty()) {
 			//!!! This log massage go to stderr ONLY, because GLOG is not initialized yet !
 			LOG(WARNING) << "Format of settings is not correct. Trying to save settings by default...";
 			saveKeyBindings();
@@ -172,6 +180,8 @@ void CConfig::saveKeyBindings() {
 	settings["ServerSettings"]["IpAddress"] = defaultKeyBindings.ipAdress;
 	//DB settings
 	settings["DatabaseSettings"]["PathToDatabaseFile"] = defaultKeyBindings.dbPath;
+	settings["DatabaseSettings"]["BlockOrClusterSize"] = defaultKeyBindings.blockOrClusterSize;
+	settings["DatabaseSettings"]["BusyTimeout"] = defaultKeyBindings.busyTimeout;
 	//Log settings
 	settings["LogSettings"]["LogDir"] = defaultKeyBindings.logDir;
 	settings["LogSettings"]["LogToStdErr"] = defaultKeyBindings.logToStdErr;
