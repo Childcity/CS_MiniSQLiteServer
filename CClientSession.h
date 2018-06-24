@@ -86,6 +86,8 @@ private:
 
 	void do_read();
 
+	void handler_read_msg(const error_code &err, size_t bytes);
+
 	void do_write(const string &msg);
 
 	//size_t read_complete(const error_code &err, size_t bytes);
@@ -95,9 +97,8 @@ private:
 
 	mutable boost::recursive_mutex cs_;
 	enum{ max_msg = 20971520, max_timeout = 30000 };
-	const char *endOfMsg = "\n";
+    const char endOfMsg[1] = {';'};
 	const size_t sizeEndOfMsg = 1;
-	//const size_t sizeEndOfMsg = countof(endOfMsg);
 	scoped_array<char> read_buffer_;
 	scoped_array<char>  write_buffer_;
 	io_context &io_context_;

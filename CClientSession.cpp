@@ -300,7 +300,7 @@ void CClientSession::do_ask_db(string &query)
 		}
 	}
 	//VLOG(1) <<answer;
-	do_write(answer+endOfMsg);
+	do_write(answer);
 }
 
 void CClientSession::on_query(const string &msg)
@@ -326,9 +326,37 @@ void CClientSession::do_read()
 
 	post_check_ping();
 
-    sock_.async_receive(buffer(read_buffer_.get(), max_msg), 0,
+    /*sock_.async_receive(buffer(read_buffer_.get(), max_msg), 0,
                         boost::bind(&CClientSession::on_read, shared_from_this(), _1, _2));
+*/
+    async_read(sock_, buffer(read_buffer_.get(), max_msg),
+               boost::asio::transfer_at_least(1),
+               boost::bind(&CClientSession::handler_read_msg, shared_from_this(), _1, _2));
+}
 
+void CClientSession::handler_read_msg(const error_code &err, size_t bytes) {
+
+	if(err){
+		if(err == boost::asio::error::eof)
+			return;
+
+		LOG(WARNING) <<"Error ehile reading from socket: " <<err;
+		stop();
+	}
+
+	auto read_buffer_begin = &read_buffer_[0];
+	auto read_buffer_end = &read_buffer_[0] + bytes * sizeof(read_buffer_.get());
+	bool bFound = (std::search(read_buffer_begin, read_buffer_end, std::begin(endOfMsg), std::end(endOfMsg)) < read_buffer_end);
+
+	if(bFound){
+		on_read(err, bytes);
+		VLOG(1) <<"; found!!!!";
+	}
+
+	VLOG(1) <<" Continue reading remaining data until EOF.";
+	async_read(sock_, buffer(read_buffer_.get(), max_msg),
+			   boost::asio::transfer_at_least(1),
+			   boost::bind(&CClientSession::handler_read_msg, shared_from_this(), _1, _2));
 }
 
 void CClientSession::do_write(const string &msg)
