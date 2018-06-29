@@ -4,12 +4,18 @@
 
 #include "main.h"
 #include "CSQLiteDB.h"
+#include "glog/logging.h"
 
 #include <boost/bind.hpp>
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
+
+#include <string>
+#include <iostream>
+#include <algorithm>
+
 
 using namespace boost::asio;
 using namespace boost::posix_time;
@@ -86,18 +92,13 @@ private:
 
 	void do_read();
 
-	void handler_read_msg(const error_code &err, size_t bytes);
-
 	void do_write(const string &msg);
-
-	//size_t read_complete(const error_code &err, size_t bytes);
-
 
 private:
 
 	mutable boost::recursive_mutex cs_;
-	enum{ max_msg = 20971520, max_timeout = 30000 };
-    const char endOfMsg[1] = {';'};
+	enum{ max_msg = 20971520, max_timeout = 5 * 60 * 1000 };
+    const char endOfMsg[1] = {'\n'};
 	const size_t sizeEndOfMsg = 1;
 	scoped_array<char> read_buffer_;
 	scoped_array<char>  write_buffer_;
