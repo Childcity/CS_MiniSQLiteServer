@@ -1,11 +1,5 @@
 ﻿#include "CClientSession.h"
 
-#include <string>
-#include <iostream>
-#include <algorithm>
-
-#include "glog/logging.h"
-
 boost::recursive_mutex clients_cs;
 typedef boost::shared_ptr<CClientSession> client_ptr;
 typedef std::vector<client_ptr> cli_ptr_vector;
@@ -20,10 +14,18 @@ void CClientSession::start()
 		clients.push_back(shared_from_this());
 	}
 
-	db = CSQLiteDB::new_();
-	LOG_IF(WARNING, ! db->OpenConnection(dbPath, busyTimeout)) << "ERROR: can't connect to db: " <<db->GetLastError();
+	db = CSQLiteDB::new_(dbPath, sqlCountOfAttempts, sqlWaitTime);
+    db->setWaitFunction([=](size_t ms){
+		// Construct a timer without setting an expiry time.
+		deadline_timer timer(io_context_);
+		// Set an expiry time relative to now.
+		timer.expires_from_now(boost::posix_time::millisec(ms));
+		// Wait for the timer to expire.
+		timer.wait();
+    });
+	LOG_IF(WARNING, ! db->OpenConnection()) << "ERROR: can't connect to db: " <<db->GetLastError();
 	db->Excute(string("PRAGMA journal_mode = WAL; PRAGMA encoding = \"UTF-8\"; "
-	           "PRAGMA foreign_keys = 1; PRAGMA page_size = " + std::to_string(blockOrClusterSize) + "; PRAGMA cache_size = 2000;").c_str());
+	           "PRAGMA foreign_keys = 1; PRAGMA page_size = " + std::to_string(blockOrClusterSize) + "; PRAGMA cache_size = -3000;").c_str());
 
 	last_ping_ = boost::posix_time::microsec_clock::local_time();
 
@@ -97,7 +99,10 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 
 	// we must make copy of read_buffer_, for quick unlock cs_ mutex
     size_t len = strlen(read_buffer_.get()) - sizeEndOfMsg;
-    LOG_IF(INFO,(len <7)||len>max_msg) <<"LENGH" <<len;
+    //LOG_IF(INFO,(len <7)||len>max_msg) <<"LENGH: " <<len <<" "<<read_buffer_.get();
+    if((len <7)||(len>max_msg))
+		len = 1;
+
 	string inMsg(len, char(0));
 	size_t cleanMsgSize = 0;
 	{
@@ -238,69 +243,65 @@ void CClientSession::do_ask_db(string &query)
 	if( ! started() )
 		return;
 
+	boost::recursive_mutex::scoped_lock bd_;
+
 	string answer("");
 
-	{
-		boost::recursive_mutex::scoped_lock bd_;
+	if(! db->isConnected()){
+		if(! db->OpenConnection()){
+			answer = "ERROR: " + db->GetLastError();
+		}
+	}
+	else{
+		//check if query is 'select' or 'insert/update...'
+		if((query.find("select") < 10) || (query.find("SELECT") < 10)){
+			//Get Data From DB
+			IResult *res = db->ExcuteSelect(query.c_str());
 
-		if(! db->isConnected()){
-			if(! db->OpenConnection(dbPath, busyTimeout)){
-				answer = "ERROR: can't connect to db - " + db->GetLastError();
+			if (nullptr == res){
+				answer = "ERROR: undefined";
 				LOG(WARNING) << answer;
+			}
+			else {
+				//Colomn Name
+				/*for (int i = 0; i < db->GetColumnCount(); ++i) {
+						const char *tmpRes = res->NextColomnName(i);
+						answer += (tmpRes ? std::move(string(tmpRes)): "NULL")+ separator;
+				}
+				answer += '\n';*/
+
+				//Data
+				while (res->Next()) {
+					for (int i = 0; i < res->GetColumnCount(); i++){
+						const char *tmpRes = res->ColomnData(i);
+						answer += (tmpRes ? std::move(string(tmpRes)): "NULL")+ separator;
+
+					}
+					answer.resize(answer.size() - 1);
+					answer += '\n';
+				}
+				//release Result Data
+				res->ReleaseStatement();
+
+				if(answer.empty())
+					answer = "EMPTY";
 			}
 		}
 		else{
-			//check if query is 'select' or 'insert/update...'
-			if((query.find("select") < 10) || (query.find("SELECT") < 10)){
-				//Get Data From DB
-				IResult *res = db->ExcuteSelect(query.c_str());
+			int effectedData =  db->Excute(query.c_str());
 
-				if (nullptr == res){
-					answer = "ERROR: " + db->GetLastError();
-					LOG(WARNING) << answer;
-				}
-				else {
-					//Colomn Name
-					/*for (int i = 0; i < db->GetColumnCount(); ++i) {
-							const char *tmpRes = res->NextColomnName(i);
-							answer += (tmpRes ? std::move(string(tmpRes)): "NULL")+ separator;
-					}
-					answer += '\n';*/
-
-					//Data
-					while (res->Next()) {
-						for (int i = 0; i < db->GetColumnCount(); i++){
-							const char *tmpRes = res->ColomnData(i);
-							answer += (tmpRes ? std::move(string(tmpRes)): "NULL")+ separator;
-
-						}
-						answer.resize(answer.size() - 1);
-						answer += '\n';
-					}
-					//release Result Data
-					res->Release();
-
-					if(answer.empty())
-						answer = "EMPTY";
-				}
+			if (effectedData < 0){
+				answer = "ERROR: last error: " + db->GetLastError();
+				LOG(WARNING) << answer;
 			}
 			else{
-				db->BeginTransaction();
-				int effectedData =  db->Excute(query.c_str());
-				db->CommitTransection();
-
-				if (effectedData < 0){
-					answer = "ERROR: " + db->GetLastError();
-					LOG(WARNING) << answer;
-				}
-				else{
-					answer = "OK: count of effected data - " + std::to_string(effectedData);
-				}
+				answer = "OK: count of effected data(" + std::to_string(effectedData) +")";
 			}
 		}
 	}
-	//VLOG(1) <<answer;
-	do_write(answer);
+
+	//VLOG(1) <<(int)answer[0]<<(int)answer[1];
+	do_write(answer + endOfMsg);
 }
 
 void CClientSession::on_query(const string &msg)
@@ -326,37 +327,9 @@ void CClientSession::do_read()
 
 	post_check_ping();
 
-    /*sock_.async_receive(buffer(read_buffer_.get(), max_msg), 0,
+    sock_.async_receive(buffer(read_buffer_.get(), max_msg), 0,
                         boost::bind(&CClientSession::on_read, shared_from_this(), _1, _2));
-*/
-    async_read(sock_, buffer(read_buffer_.get(), max_msg),
-               boost::asio::transfer_at_least(1),
-               boost::bind(&CClientSession::handler_read_msg, shared_from_this(), _1, _2));
-}
-
-void CClientSession::handler_read_msg(const error_code &err, size_t bytes) {
-
-	if(err){
-		if(err == boost::asio::error::eof)
-			return;
-
-		LOG(WARNING) <<"Error ehile reading from socket: " <<err;
-		stop();
-	}
-
-	auto read_buffer_begin = &read_buffer_[0];
-	auto read_buffer_end = &read_buffer_[0] + bytes * sizeof(read_buffer_.get());
-	bool bFound = (std::search(read_buffer_begin, read_buffer_end, std::begin(endOfMsg), std::end(endOfMsg)) < read_buffer_end);
-
-	if(bFound){
-		on_read(err, bytes);
-		VLOG(1) <<"; found!!!!";
-	}
-
-	VLOG(1) <<" Continue reading remaining data until EOF.";
-	async_read(sock_, buffer(read_buffer_.get(), max_msg),
-			   boost::asio::transfer_at_least(1),
-			   boost::bind(&CClientSession::handler_read_msg, shared_from_this(), _1, _2));
+    
 }
 
 void CClientSession::do_write(const string &msg)

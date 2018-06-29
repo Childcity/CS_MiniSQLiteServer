@@ -10,7 +10,8 @@
 
 //Global variable declared in main.h
 std::string dbPath;
-int busyTimeout;
+size_t sqlWaitTime;
+size_t sqlCountOfAttempts;
 long blockOrClusterSize;
 
 static int running_from_service = 0;
@@ -22,7 +23,7 @@ int main(int argc, char *argv[])
 	if( ! running_from_service )
 	{
 		cfg.Load();
-		LOG_IF(FATAL, CConfig::Status::ERROR == cfg.getStatus()) <<"Check settings file" ;
+		LOG_IF(FATAL, CConfig::Status::ERROR == cfg.getStatus()) <<"Check settings file and RESTART" ;
 
 		running_from_service = 1;
 		/*if( service_register((LPWSTR)cfg.keyBindings.serviceName.c_str()) )
@@ -55,8 +56,9 @@ int main(int argc, char *argv[])
 
         dbPath = cfg.keyBindings.dbPath;
         blockOrClusterSize = cfg.keyBindings.blockOrClusterSize;
-        busyTimeout = static_cast<int>(cfg.keyBindings.busyTimeout);
-VLOG(1) <<blockOrClusterSize <<' ' <<busyTimeout;
+        sqlWaitTime = static_cast<size_t>(cfg.keyBindings.waitTimeMillisec);
+        sqlCountOfAttempts = static_cast<size_t>(cfg.keyBindings.countOfEttempts);
+
         if(cfg.keyBindings.ipAdress.empty()){
             CServer Server(io_context, static_cast<unsigned short>(cfg.keyBindings.port),
 						   static_cast<unsigned short>(static_cast<short>(cfg.keyBindings.threads)));
@@ -80,8 +82,8 @@ void TestSqlite3Settings(CConfig *cfg){
 
     LOG_IF(FATAL, sqlite3_threadsafe() == 0 ) <<"Sqlite compiled without 'threadsafe' mode";
 
-    CSQLiteDB::ptr db = CSQLiteDB::new_();
-	LOG_IF(FATAL, ! db->OpenConnection(cfg->keyBindings.dbPath)) <<"Can't connect to db: " <<db->GetLastError();
+    CSQLiteDB::ptr db = CSQLiteDB::new_(cfg->keyBindings.dbPath);
+	LOG_IF(FATAL, ! db->OpenConnection()) <<"Can't connect to db, check permission: " << db->GetLastError();
 
 	VLOG(1) <<"DEBUG: connection to db checked - everything is OK";
 }

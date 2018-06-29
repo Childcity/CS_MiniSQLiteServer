@@ -9,7 +9,8 @@
 #include "CConfig.h"
 
 extern std::string dbPath;
-extern int busyTimeout;
+extern size_t sqlWaitTime;
+extern size_t sqlCountOfAttempts;
 extern long blockOrClusterSize;
 
 int main(int argc, char *argv[]);

@@ -2,34 +2,34 @@
 #ifndef CS_MINISQLITESERVER_CSQLITEDB_H
 #define CS_MINISQLITESERVER_CSQLITEDB_H
 
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/enable_shared_from_this.hpp>
+#include <boost/thread/thread.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <string>
 
 #include "sqlite3/sqlite3.h"
+#include "glog/logging.h"
 
 using std::string;
 using boost::scoped_ptr;
 using boost::shared_ptr;
 
-/*Interface class for Result data of query*/
-class IResult : public boost::enable_shared_from_this<IResult>
-        , boost::noncopyable {
+/*Interface class for Result data of sqlQuery*/
+class IResult : public boost::noncopyable {
 public:
-    /*Shared pointer to IResult*/
-    typedef shared_ptr<IResult> ptr;
 
     /*This function return of count of column
-      present in result set of last excueted query*/
+      present in result set of last excueted sqlQuery*/
     virtual int	GetColumnCount() = 0;
 
     /*Get the next coloumn name*/
     virtual const char *NextColomnName(int iClmnCount) = 0;
 
     /*This function returns TRUE if still rows are
-    der in result set of last excueted query FALSE
+    der in result set of last excueted sqlQuery FALSE
     if no row present*/
     virtual bool  Next() = 0;
 
@@ -37,42 +37,34 @@ public:
     virtual const char *ColomnData(int clmNum) = 0;
 
     /*RExcuteSelectELEASE all result set as well as RESET all data*/
-    virtual void Release() = 0;
+    virtual void ReleaseStatement() = 0;
 };
 
 
 
 //SQLite Wrapper Class
 class CSQLiteDB : public IResult
-        , boost::enable_shared_from_this<CSQLiteDB> {
+        , public boost::noncopyable
+        , public boost::enable_shared_from_this<CSQLiteDB> {
 private:
-    explicit CSQLiteDB()
-            : pSQLiteConn((new SQLLITEConnection()))
-            , bConnected_(false)
-    {}
+    explicit CSQLiteDB(string databasePath, size_t sqlEttempts, size_t sqlWaitTime);
 
 public:
 
     typedef shared_ptr<CSQLiteDB> ptr;
 
     /*Class factory. This method create shared pointer to CSQLiteDB.*/
-    static ptr new_();;
+    static ptr new_(string databasePath, size_t sqlEttempts = 200, size_t sqlWaitTime = 50);
 
-    /*Open Connection*/
-    bool OpenConnection(string databasePath, int busyTimeout = 0);
+    bool OpenConnection();
 
-    /*Query Wrapper*/
-    /*For large insert operation Memory Insert option for SQLLITE dbJournal*/
-    void BeginTransaction();
-    void CommitTransection();
-
-    /*This Method called when SELECT Query to be excuted.
+    /*This Method called when SELECT sqlQuery to be excuted.
     Return RESULTSET class pointer on success else nullptr of failed*/
-    IResult *ExcuteSelect(const char *query);
+    IResult *ExcuteSelect(const char *sqlQuery);
 
-    /*This Method called when INSERT/DELETE/UPDATE Query to be excuted.
+    /*This Method called when INSERT/DELETE/UPDATE sqlQuery to be excuted.
     Return int count of effected data on success*/
-    int Excute(const char *query);
+    int Excute(const char *sqlQuery);
 
     /*Get Last Error of excution*/
     string GetLastError();
@@ -80,39 +72,48 @@ public:
     /*Return TRUE if databse is connected else FALSE*/
     bool  isConnected() ;
 
+    void setWaitFunction(std::function<void(size_t)> waitFunc);
 
 protected:
     /*SQLite Connection Object*/
-    struct SQLLITEConnection
-    {
+    struct SQLLITEConnection{
+        size_t          iSQLWaitTime_;
+        size_t          iSQLEttempts_;
         string          dbPath;    //Path to database
         sqlite3		    *pCon;     //SQLite Connection Object
         sqlite3_stmt    *pStmt;     //SQLite statement object
-        void FinalizeRes();
-        SQLLITEConnection()
-                : pCon(nullptr)
-                , pStmt(nullptr){}
+        void ReleaseStmt();
+        SQLLITEConnection(string databasePath, size_t sqlEttempts, size_t sqlWaitTime);
         virtual ~SQLLITEConnection();
     };
 
     //SQLite Connection Details
-     scoped_ptr<SQLLITEConnection> pSQLiteConn;
+    scoped_ptr<SQLLITEConnection> pSQLiteConn;
+
+    std::function<void(const size_t)> fWaitFunction_;
+
+    bool PrepareSql(const char *sqlQuery);
+
+    int StepSql();
+
+    bool BeginTransaction();
+
+    bool EndTransaction();
 
     bool	bConnected_;      /*Is Connected To DB*/
     string  strLastError_;    /*Last Error String*/
     int     iColumnCount_;    /*No.Of Column in Result*/
 
-
-public:
+private:
     /*This function return of count of column
-      present in result set of last excueted query*/
+      present in result set of last excueted sqlQuery*/
     int	GetColumnCount() override;
 
     /*Get the next coloumn name*/
     const char *NextColomnName(int iClmnCount) override;
 
     /*This function returns TRUE if still rows are
-    der in result set of last excueted query FALSE
+    der in result set of last excueted sqlQuery FALSE
     if no row present*/
     bool  Next() override;
 
@@ -120,8 +121,7 @@ public:
     const char *ColomnData(int clmNum) override;
 
     /*RELEASE all result set as well as RESET all data*/
-    void Release() override;
-
+    void ReleaseStatement() override;
 };
 
 #endif //CS_MINISQLITESERVER_CSQLITEDB_H

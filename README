@@ -1,0 +1,17 @@
+#для того чтобы построить нужные библиотеки из boost и установить их в папку с проэктом
+#сделайте cd ./boost_1_67_0
+#затем выполните следующие 2 команды, предварительно изменив в путях '/home/childcity/CLionProjects' на папку, где лежит CS_MiniSQLiteServer
+
+./bootstrap.sh --with-libraries=system,thread,regex #--show-libraries
+
+./b2 -j2 --libdir=/home/childcity/CLionProjects/CS_MiniSQLiteServer/libs/boost --includedir=/home/childcity/CLionProjects/CS_MiniSQLiteServer/include --with-thread --with-regex --with-date_time --with-system variant=release link=static threading=multi runtime-link=shared install
+
+#glog 3.5 должен быть установлен в систему
+
+#чтобы скомпилировать сервер выполните
+cd ./CS_MiniSQLiteServer
+mkdir build
+cd build
+cmake ..
+cmake --build . --config Release --target CS_MiniSQLiteServer --
+

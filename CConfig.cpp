@@ -16,7 +16,8 @@ CConfig::KeyBindings::KeyBindings(const string exePath)
 
 	dbPath = exeFolderPath_ + "defaultEmptyDb.sqlite3";
 	blockOrClusterSize = 4096;
-	busyTimeout = 60000;
+	waitTimeMillisec = 50;
+	countOfEttempts = 200;
 
 	ipAdress = "127.0.0.1";
 	port = 65043;
@@ -42,6 +43,9 @@ void CConfig::Load()
 		setLocale();
 		updateKeyBindings();
 		initGlog();
+
+		LOG(INFO) <<"Log lines have this form:"
+		          <<"\nLmmdd hh:mm:ss.uuuuuu threadid file:line] msg...";
 	}catch (std::exception &e){
 		LOG(FATAL) <<"Unexpected error: " <<e.what();
 	}
@@ -97,8 +101,8 @@ void CConfig::initGlog()
 	fLS::FLAGS_log_dir = newFolder;
 	FLAGS_logtostderr = keyBindings.logToStdErr;
 	FLAGS_stop_logging_if_full_disk = keyBindings.stopLoggingIfFullDisk;
-	FLAGS_v = keyBindings.verbousLog;
-	FLAGS_minloglevel = keyBindings.minLogLevel;
+	FLAGS_v = static_cast<google::int32>(keyBindings.verbousLog);
+	FLAGS_minloglevel = static_cast<google::int32>(keyBindings.minLogLevel);
 
 	int ret = mkdir(keyBindings.logDir.c_str(),  S_IRWXU | S_IRWXG |  S_IRWXO);
 	if((0 != ret) && (EEXIST != errno)){
@@ -134,7 +138,8 @@ void CConfig::updateKeyBindings() {
 		//DB settings
 		keyBindings.dbPath = settings.Get("DatabaseSettings", "PathToDatabaseFile", "_a");
 		keyBindings.blockOrClusterSize = settings.GetInteger("DatabaseSettings", "BlockOrClusterSize", -1L);
-		keyBindings.busyTimeout = settings.GetInteger("DatabaseSettings", "BusyTimeout", -1L);
+		keyBindings.waitTimeMillisec = settings.GetInteger("DatabaseSettings", "WaitTimeMillisec", -1L);
+		keyBindings.countOfEttempts = settings.GetInteger("DatabaseSettings", "CountOfAttempts", -1L);
 		//Log settings
 		keyBindings.logDir = settings.Get("LogSettings", "LogDir", "_a");
 		keyBindings.logToStdErr = settings.GetBoolean("LogSettings", "LogToStdErr", false);
@@ -145,7 +150,8 @@ void CConfig::updateKeyBindings() {
 		keyBindings.serviceName = settings.Get("ServiceSettings", "ServiceName", "_a");
 
 		if (keyBindings.port <= 0L || keyBindings.threads <= 0L || keyBindings.ipAdress == "0"
-			|| keyBindings.blockOrClusterSize == -1L || keyBindings.busyTimeout <= 0L
+			|| keyBindings.blockOrClusterSize == -1L || keyBindings.countOfEttempts <= 0L
+			|| keyBindings.waitTimeMillisec <= 0
 			|| keyBindings.dbPath == "_a" || keyBindings.dbPath.empty()
 			|| keyBindings.logDir == "_a" || keyBindings.logDir.empty()
 			|| keyBindings.serviceName == "_a" || keyBindings.serviceName.empty()) {
@@ -161,6 +167,10 @@ void CConfig::updateKeyBindings() {
 
 		if(keyBindings.serviceName.empty()){
 			keyBindings.serviceName = defaultKeyBindings.serviceName;
+		}
+
+		if(keyBindings.dbPath.empty()){
+			keyBindings.dbPath = defaultKeyBindings.dbPath;
 		}
 
 		//If we |here|, settings loaded correctly and we can continue
@@ -181,7 +191,8 @@ void CConfig::saveKeyBindings() {
 	//DB settings
 	settings["DatabaseSettings"]["PathToDatabaseFile"] = defaultKeyBindings.dbPath;
 	settings["DatabaseSettings"]["BlockOrClusterSize"] = defaultKeyBindings.blockOrClusterSize;
-	settings["DatabaseSettings"]["BusyTimeout"] = defaultKeyBindings.busyTimeout;
+	settings["DatabaseSettings"]["WaitTimeMillisec"]("Time, that thread waiting before next attempt to begin 'write transaction'") = defaultKeyBindings.waitTimeMillisec;
+	settings["DatabaseSettings"]["CountOfAttempts"]("Number of attempts to begin 'write transaction'") = defaultKeyBindings.countOfEttempts;
 	//Log settings
 	settings["LogSettings"]["LogDir"] = defaultKeyBindings.logDir;
 	settings["LogSettings"]["LogToStdErr"] = defaultKeyBindings.logToStdErr;

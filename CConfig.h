@@ -15,7 +15,8 @@ private:
 
 		string dbPath;
 		long blockOrClusterSize;
-		long busyTimeout;
+		long waitTimeMillisec;
+		long countOfEttempts;
 
 		string ipAdress;
 		long port;
