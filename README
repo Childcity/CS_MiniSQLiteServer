@@ -13,5 +13,5 @@ cd ./CS_MiniSQLiteServer
 mkdir build
 cd build
 cmake ..
-cmake --build . --config Release --target CS_MiniSQLiteServer --
+cmake --build . --config Release --target CS_MiniSQLiteServer -- -j 2
 
