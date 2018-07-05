@@ -9,7 +9,6 @@ find_package(glog REQUIRED)
 set(USED_LIBS boost_system boost_regex boost_thread glog::glog)
 
 
-
 set(CMAKE_CXX_FLAGS "-pthread -std=c++14 -Wall -Wno-reorder")
 
 set(SOURCES

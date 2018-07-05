@@ -85,7 +85,7 @@ IResult *CSQLiteDB::ExcuteSelect(const char *sqlQuery)
 
     if( ! PrepareSql(sqlQuery) ) {
         strLastError_ = "prepare statement error/timeout: " + string(sqlite3_errmsg(pSQLiteConn->pCon));
-        LOG(WARNING) << "SQLITE: prepare statement error/timeout on handle(" << pSQLiteConn->pStmt <<"): (" << sqlite3_errmsg(pSQLiteConn->pCon);
+        LOG(WARNING) << "SQLITE: prepare statement error/timeout on handle(" << pSQLiteConn->pStmt <<") (" << sqlite3_errmsg(pSQLiteConn->pCon) <<")";
         return nullptr;
     }
 
@@ -110,7 +110,7 @@ int CSQLiteDB::Excute(const char *sqlQuery)
     if( !PrepareSql(sqlQuery) ) {
         /** Timeout or error --> exit **/
         strLastError_ = "error while executing statement, (prepare statement error/timeout): " + string(sqlite3_errmsg(pSQLiteConn->pCon));
-        LOG(WARNING) << "SQLITE: error while executing statement: " << sqlite3_errmsg(pSQLiteConn->pCon);
+        LOG(WARNING) << "SQLITE: error while executing statement (" << sqlite3_errmsg(pSQLiteConn->pCon) <<")";
         return 0;
     }
 
@@ -203,7 +203,7 @@ bool CSQLiteDB::PrepareSql(const char *sqlQuery) {
 
     if( rc != SQLITE_OK)
     {
-        LOG(WARNING) << "SQLITE: prepare statement error. Returned with error_code(" << rc <<"): " << sqlite3_errmsg(pSQLiteConn->pCon) << std::endl
+        LOG(WARNING) << "SQLITE: prepare statement error. Returned with error_code(" << rc <<") (" << sqlite3_errmsg(pSQLiteConn->pCon) << ")" << std::endl
                      << "Statement: " <<sqlQuery;
         return false;
     }

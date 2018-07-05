@@ -29,8 +29,7 @@ void CClientSession::start()
 
 	last_ping_ = boost::posix_time::microsec_clock::local_time();
 
-	// first, we send 'ping OK' and wait for client to login
-	on_ping();
+	do_read();
 }
 
 CClientSession::ptr CClientSession::new_(io_context& io_context)
