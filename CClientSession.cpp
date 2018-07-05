@@ -29,8 +29,7 @@ void CClientSession::start()
 
 	last_ping_ = boost::posix_time::microsec_clock::local_time();
 
-	// first, we send 'ping OK' and wait for client to login
-	on_ping();
+	do_read();
 }
 
 CClientSession::ptr CClientSession::new_(io_context& io_context)
@@ -301,7 +300,7 @@ void CClientSession::do_ask_db(string &query)
 	}
 
 	//VLOG(1) <<(int)answer[0]<<(int)answer[1];
-	do_write(answer + endOfMsg);
+	do_write(answer);
 }
 
 void CClientSession::on_query(const string &msg)

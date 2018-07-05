@@ -98,7 +98,7 @@ private:
 
 	mutable boost::recursive_mutex cs_;
 	enum{ max_msg = 20971520, max_timeout = 5 * 60 * 1000 };
-    const char endOfMsg[1] = {'\n'};
+    const char endOfMsg[0] = {};
 	const size_t sizeEndOfMsg = 1;
 	scoped_array<char> read_buffer_;
 	scoped_array<char>  write_buffer_;
