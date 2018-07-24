@@ -273,7 +273,7 @@ void CClientSession::do_ask_db(string &query)
 				while (res->Next()) {
 					for (int i = 0; i < res->GetColumnCount(); i++){
 						const char *tmpRes = res->ColomnData(i);
-						answer += (tmpRes ? std::move(string(tmpRes)): "NULL")+ separator;
+						answer += (tmpRes ? std::move(string(tmpRes)): "None")+ separator;
 
 					}
 					answer.resize(answer.size() - 1);
@@ -281,9 +281,13 @@ void CClientSession::do_ask_db(string &query)
 				}
 				//release Result Data
 				res->ReleaseStatement();
-
-				if(answer.empty())
-					answer = "EMPTY";
+                                
+				if(answer.empty()){
+					answer = "NONE";
+				}
+				else{
+				answer.erase(answer.size() - 1);
+				}
 			}
 		}
 		else{
@@ -294,7 +298,8 @@ void CClientSession::do_ask_db(string &query)
 				LOG(WARNING) << answer;
 			}
 			else{
-				answer = "OK: count of effected data(" + std::to_string(effectedData) +")";
+				//answer = "OK: count of effected data(" + std::to_string(effectedData) +")";
+				answer = "NONE";
 			}
 		}
 	}
