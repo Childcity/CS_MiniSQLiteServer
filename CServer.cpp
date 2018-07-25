@@ -9,7 +9,7 @@ void CServer::Start()
 
 	// init first client
 	VLOG(1) << "DEBUG: init first client" << std::endl;
-	CClientSession::ptr client = CClientSession::new_(io_context_);
+	CClientSession::ptr client = CClientSession::new_(io_context_, maxTimeout_);
 
 	// accept first client
 	VLOG(1) << "DEBUG: accept first client";
@@ -28,7 +28,7 @@ void CServer::do_accept(CClientSession::ptr client, const boost::system::error_c
 	CHECK(!err) << "\nAccepting client faild with error: " << err << ". Closing server...";
 
 	client->start();
-	CClientSession::ptr new_client = CClientSession::new_(io_context_);
+	CClientSession::ptr new_client = CClientSession::new_(io_context_, maxTimeout_);
 
 	VLOG(1) << "DEBUG: accept NEXT client";
 	acceptor_.async_accept(new_client->sock(), boost::bind(&CServer::do_accept, this, new_client, _1));

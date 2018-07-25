@@ -111,6 +111,7 @@ int CSQLiteDB::Excute(const char *sqlQuery)
         /** Timeout or error --> exit **/
         strLastError_ = "error while executing statement, (prepare statement error/timeout): " + string(sqlite3_errmsg(pSQLiteConn->pCon));
         LOG(WARNING) << "SQLITE: error while executing statement (" << sqlite3_errmsg(pSQLiteConn->pCon) <<")";
+        EndTransaction();
         return 0;
     }
 

@@ -30,10 +30,11 @@ class CClientSession : public boost::enable_shared_from_this<CClientSession>
 private:
 	typedef boost::system::error_code error_code;
 
-    explicit CClientSession(io_context& io_context)
+    explicit CClientSession(io_context &io_context, const size_t maxTimeout)
 		: sock_(io_context)
 		, started_(false)
 		, timer_(io_context)
+        , maxTimeout_(maxTimeout)
 		, clients_changed_(false)
 		, username_("user")
 		, io_context_(io_context)
@@ -49,7 +50,7 @@ public:
 	void start();
 
 	// class factory. scoped_array = Return ptr to this class
-	static ptr new_(io_context& io_context);
+	static ptr new_(io_context& io_context, size_t maxTimeout);
 
 	// stop working with current client and remove it from clients
 	void stop();
@@ -97,7 +98,8 @@ private:
 private:
 
 	mutable boost::recursive_mutex cs_;
-	enum{ max_msg = 20971520, max_timeout = 5 * 60 * 1000 };
+	enum{ max_msg = 20971520 };
+	const size_t maxTimeout_;
     const char endOfMsg[0] = {};
 	const size_t sizeEndOfMsg = 1;
 	scoped_array<char> read_buffer_;

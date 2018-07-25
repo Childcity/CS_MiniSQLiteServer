@@ -32,9 +32,9 @@ void CClientSession::start()
 	do_read();
 }
 
-CClientSession::ptr CClientSession::new_(io_context& io_context)
+CClientSession::ptr CClientSession::new_(io_context& io_context, const size_t maxTimeout)
 {
-	ptr new_(new CClientSession(io_context));
+	ptr new_(new CClientSession(io_context, maxTimeout));
 	return new_;
 }
 
@@ -57,7 +57,8 @@ void CClientSession::stop()
 	{
 		boost::recursive_mutex::scoped_lock lk(clients_cs);
 		auto it = std::find(clients.begin(), clients.end(), self);
-		clients.erase(it);
+		if(it != clients.end())
+		    clients.erase(it);
 	}
 	update_clients_changed();
 }
@@ -189,7 +190,7 @@ void CClientSession::on_check_ping()
 	boost::recursive_mutex::scoped_lock lk(cs_);
 	boost::posix_time::ptime now = boost::posix_time::microsec_clock::local_time();
 
-	if( (now - last_ping_).total_milliseconds() >= (max_timeout-1) ){
+	if( (now - last_ping_).total_milliseconds() >= long(maxTimeout_ - 1) ){
 		VLOG(1) << "DEBUG: stopping: " << username_ << " - no ping in time" << std::endl;
 		stop();
 	}
@@ -200,7 +201,7 @@ void CClientSession::on_check_ping()
 void CClientSession::post_check_ping()
 {
 	boost::recursive_mutex::scoped_lock lk(cs_);
-	timer_.expires_from_now(boost::posix_time::millisec((size_t)max_timeout));
+	timer_.expires_from_now(boost::posix_time::millisec(maxTimeout_));
 	timer_.async_wait(boost::bind(&CClientSession::on_check_ping, shared_from_this()));
 }
 

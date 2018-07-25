@@ -13,16 +13,18 @@ using boost::asio::ip::tcp;
 
 class CServer{
 public:
-	explicit CServer(io_context& io_context, unsigned short port, unsigned short thread_num)
+	explicit CServer(io_context& io_context, const size_t maxTimeout, unsigned short port, unsigned short thread_num)
 		: acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
 		, io_context_(io_context)
 		, thread_num_(thread_num)
+		, maxTimeout_(maxTimeout)
 	{ Start(); }
 
-	explicit CServer(io_context& io_context, const std::string &ipAddress, unsigned short port, unsigned short thread_num)
+	explicit CServer(io_context& io_context, const size_t maxTimeout, const std::string &ipAddress, unsigned short port, unsigned short thread_num)
 		: acceptor_(io_context, tcp::endpoint(ip::address::from_string(ipAddress), port))
 		, io_context_(io_context)
 		, thread_num_(thread_num)
+		, maxTimeout_(maxTimeout)
 	{ Start(); }
 	
 	CServer(CServer const&) = delete;
@@ -39,6 +41,7 @@ private:
 	tcp::acceptor acceptor_;
 	boost::thread_group threads;
 	short thread_num_;
+	const size_t maxTimeout_;
 };
 
 #endif //CS_MINISQLITESERVER_CSERVER_H

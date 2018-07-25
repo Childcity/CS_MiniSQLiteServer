@@ -60,12 +60,16 @@ int main(int argc, char *argv[])
         sqlCountOfAttempts = static_cast<size_t>(cfg.keyBindings.countOfEttempts);
 
         if(cfg.keyBindings.ipAdress.empty()){
-            CServer Server(io_context, static_cast<unsigned short>(cfg.keyBindings.port),
+            CServer Server(io_context,
+						   static_cast<const size_t>(cfg.keyBindings.timeoutToDropConnection),
+						   static_cast<unsigned short>(cfg.keyBindings.port),
 						   static_cast<unsigned short>(static_cast<short>(cfg.keyBindings.threads)));
         }
         else {
-			CServer Server(io_context, cfg.keyBindings.ipAdress, static_cast<unsigned short>(cfg.keyBindings.port),
-						   static_cast<unsigned short>(static_cast<short>(cfg.keyBindings.threads)));
+			CServer Server(io_context,
+						   static_cast<const size_t>(cfg.keyBindings.timeoutToDropConnection),
+						   cfg.keyBindings.ipAdress, static_cast<unsigned short>(cfg.keyBindings.port),
+						   static_cast<unsigned short>(cfg.keyBindings.threads));
 		}
 
 	} catch(std::exception &e) {
