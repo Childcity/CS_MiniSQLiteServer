@@ -21,6 +21,7 @@ private:
 		string ipAdress;
 		long port;
 		long threads;
+		long  timeoutToDropConnection;
 
 		string logDir;
 		bool logToStdErr;

@@ -22,6 +22,8 @@ CConfig::KeyBindings::KeyBindings(const string exePath)
 	ipAdress = "127.0.0.1";
 	port = 65043;
 	threads = 10;
+    countOfEttempts = 200;
+    timeoutToDropConnection = 5 * 60 * 1000; //5 min
 
 	logDir = exeFolderPath_ + "logs";
 	logToStdErr = false;
@@ -75,7 +77,7 @@ void CConfig::setStatusError()
 
 string CConfig::getConstructedNameOfLogDir() const
 {
-	std::time_t t = std::time(0);   // get time now
+	std::time_t t = std::time(nullptr);   // get time now
 	std::tm *now = std::localtime(&t);
 
 	std::ostringstream nameStream;
@@ -135,6 +137,7 @@ void CConfig::updateKeyBindings() {
 		keyBindings.port = settings.GetInteger("ServerSettings", "Port", -1L);
 		keyBindings.threads = settings.GetInteger("ServerSettings", "Threads", -1L);
 		keyBindings.ipAdress = settings.Get("ServerSettings", "IpAddress", "0");
+		keyBindings.timeoutToDropConnection = settings.GetInteger("ServerSettings", "TimeoutToDropConnection", -1L);
 		//DB settings
 		keyBindings.dbPath = settings.Get("DatabaseSettings", "PathToDatabaseFile", "_a");
 		keyBindings.blockOrClusterSize = settings.GetInteger("DatabaseSettings", "BlockOrClusterSize", -1L);
@@ -151,7 +154,8 @@ void CConfig::updateKeyBindings() {
 
 		if (keyBindings.port <= 0L || keyBindings.threads <= 0L || keyBindings.ipAdress == "0"
 			|| keyBindings.blockOrClusterSize == -1L || keyBindings.countOfEttempts <= 0L
-			|| keyBindings.waitTimeMillisec <= 0
+			|| keyBindings.waitTimeMillisec <= 0L
+			|| keyBindings.timeoutToDropConnection <= 0L
 			|| keyBindings.dbPath == "_a" || keyBindings.dbPath.empty()
 			|| keyBindings.logDir == "_a" || keyBindings.logDir.empty()
 			|| keyBindings.serviceName == "_a" || keyBindings.serviceName.empty()) {
@@ -188,6 +192,7 @@ void CConfig::saveKeyBindings() {
 	settings["ServerSettings"]["Port"] = defaultKeyBindings.port;
 	settings["ServerSettings"]["Threads"] = defaultKeyBindings.threads;
 	settings["ServerSettings"]["IpAddress"] = defaultKeyBindings.ipAdress;
+	settings["ServerSettings"]["TimeoutToDropConnection"]("5 min") = defaultKeyBindings.timeoutToDropConnection;
 	//DB settings
 	settings["DatabaseSettings"]["PathToDatabaseFile"] = defaultKeyBindings.dbPath;
 	settings["DatabaseSettings"]["BlockOrClusterSize"]("Set, according to your file system block/cluster size. This make sqlite db more faster") = defaultKeyBindings.blockOrClusterSize;
