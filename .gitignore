@@ -6,6 +6,7 @@ async.h
 CRunAsync*
 
 .vs/*
+working_exe/logs/*
 Debug/*
 Release/*
 x64/*

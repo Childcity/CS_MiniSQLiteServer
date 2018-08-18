@@ -7,7 +7,11 @@
 #include "CSQLiteDB.h"
 #include "CServer.h"
 #include "CConfig.h"
-//#include "Service.h" //For Windows Service
+
+#ifdef WIN32
+	#include "Service.h" //For Windows Service
+#endif // WIN32
+
 
 //Global variable declared in main.h
 std::string dbPath;
@@ -27,10 +31,10 @@ int main(int argc, char *argv[])
 		LOG_IF(FATAL, CConfig::Status::ERROR == cfg.getStatus()) <<"Check settings file and RESTART" ;
 
 		running_from_service = 1;
-		/*if( service_register((LPWSTR)cfg.keyBindings.serviceName.c_str()) )
+		if( service_register(argc, argv, (LPSTR)cfg.keyBindings.serviceName.c_str()) )
 		{
 			VLOG(1) << "DEBUG: We've been called as a service. Register service and exit this thread.";
-			*//* We've been called as a service. Register service
+			/* We've been called as a service. Register service
 			* and exit this thread. main() would be called from
 			* service.c next time.
 			*
@@ -39,9 +43,9 @@ int main(int argc, char *argv[])
 			* That is why we should set running_from_service
 			* before calling service_register and unset it
 			* afterwards.
-			*//*
+			*/
 			return 0;
-		}*/
+		}
 
 		LOG(INFO) <<"Started as console application";
 
