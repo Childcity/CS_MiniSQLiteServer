@@ -38,8 +38,8 @@ private:
 		, clients_changed_(false)
 		, username_("user")
 		, io_context_(io_context)
-		, write_buffer_({ new char[max_msg] })
-		, read_buffer_({ new char[max_msg] })
+		, write_buffer_({ new char[MAX_WRITE_BUFFER] })
+		, read_buffer_({ new char[MAX_READ_BUFFER] })
 	{}
 
 public:
@@ -98,9 +98,9 @@ private:
 private:
 
 	mutable boost::recursive_mutex cs_;
-	enum{ max_msg = 20971520 };
+	enum{ MAX_WRITE_BUFFER = 20971520, MAX_READ_BUFFER = 102400 };
 	const size_t maxTimeout_;
-    const char endOfMsg[0] = {};
+    //const char endOfMsg[0] = {};
 	const size_t sizeEndOfMsg = 1;
 	scoped_array<char> read_buffer_;
 	scoped_array<char>  write_buffer_;

@@ -100,7 +100,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 	// we must make copy of read_buffer_, for quick unlock cs_ mutex
     size_t len = strlen(read_buffer_.get()) - sizeEndOfMsg;
     //LOG_IF(INFO,(len <7)||len>max_msg) <<"LENGH: " <<len <<" "<<read_buffer_.get();
-    if((len <7)||(len>max_msg))
+    if((len < 7)||(len > MAX_READ_BUFFER))
 		len = 1;
 
 	string inMsg(len, char(0));
@@ -327,12 +327,12 @@ void CClientSession::do_read()
 
 	{
 		boost::recursive_mutex::scoped_lock lk(cs_);
-		ZeroMemory(read_buffer_.get(), sizeof(char) * max_msg);
+		ZeroMemory(read_buffer_.get(), sizeof(char) * MAX_READ_BUFFER);
 	}
 
 	post_check_ping();
 
-    sock_.async_receive(buffer(read_buffer_.get(), max_msg), 0,
+    sock_.async_receive(buffer(read_buffer_.get(), MAX_READ_BUFFER), 0,
                         boost::bind(&CClientSession::on_read, shared_from_this(), _1, _2));
     
 }

@@ -44,7 +44,7 @@ void service_main()
 
     // Calling main
 	VLOG(1) << "DEBUG: starting server from service.";
-    ServiceStatus.dwWin32ExitCode = wmain();
+    ServiceStatus.dwWin32ExitCode = main();
     ServiceStatus.dwCurrentState  = SERVICE_STOPPED;
     SetServiceStatus(hStatus, &ServiceStatus);
     return;
