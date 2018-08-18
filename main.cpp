@@ -31,6 +31,7 @@ int main(int argc, char *argv[])
 		LOG_IF(FATAL, CConfig::Status::ERROR == cfg.getStatus()) <<"Check settings file and RESTART" ;
 
 		running_from_service = 1;
+#ifdef WIN32
 		if( service_register(argc, argv, (LPSTR)cfg.keyBindings.serviceName.c_str()) )
 		{
 			VLOG(1) << "DEBUG: We've been called as a service. Register service and exit this thread.";
@@ -46,6 +47,7 @@ int main(int argc, char *argv[])
 			*/
 			return 0;
 		}
+#endif // WIN32
 
 		LOG(INFO) <<"Started as console application";
 

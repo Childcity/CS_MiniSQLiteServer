@@ -27,6 +27,7 @@ constexpr std::size_t countof(T const (&)[N]) noexcept
     return N;
 }
 
+#ifdef WIN32
 template<class A, class B>
 static B ConverterUTF8_UTF16(A str1)
 {
@@ -39,3 +40,4 @@ static B ConverterUTF8_UTF16(A str1)
 		return converterUTF8_UTF16.from_bytes(str1);
 	}
 }
+#endif // WIN32
