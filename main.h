@@ -6,7 +6,6 @@
 //#define GOOGLE_STRIP_LOG 0 // cut all glog strings from .exe
 
 #include <string>
-#include <codecvt>	
 #include "CConfig.h"
 
 extern std::string dbPath;
@@ -28,6 +27,7 @@ constexpr std::size_t countof(T const (&)[N]) noexcept
 }
 
 #ifdef WIN32
+#include <codecvt>
 template<class A, class B>
 static B ConverterUTF8_UTF16(A str1)
 {
