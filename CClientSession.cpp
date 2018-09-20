@@ -295,7 +295,7 @@ void CClientSession::do_ask_db(string &query)
 			int effectedData =  db->Excute(query.c_str());
 
 			if (effectedData < 0){
-				answer = "ERROR: last error: " + db->GetLastError();
+				answer = std::string("ERROR: last error: " + db->GetLastError());
 				LOG(WARNING) << answer;
 			}
 			else{
