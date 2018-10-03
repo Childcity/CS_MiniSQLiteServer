@@ -50,7 +50,7 @@ private:
 
 public:
 
-    virtual ~CSQLiteDB(){}
+    virtual ~CSQLiteDB(){VLOG(1) <<"By, db!!!";}
 
     typedef shared_ptr<CSQLiteDB> ptr;
 

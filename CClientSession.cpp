@@ -261,8 +261,7 @@ void CClientSession::do_ask_db(string &query)
 			if (nullptr == res){
 				answer = "ERROR: undefined";
 				LOG(WARNING) << answer;
-			}
-			else {
+			} else {
 				//Colomn Name
 				/*for (int i = 0; i < db->GetColumnCount(); ++i) {
 						const char *tmpRes = res->NextColomnName(i);
@@ -285,13 +284,11 @@ void CClientSession::do_ask_db(string &query)
                                 
 				if(answer.empty()){
 					answer = "NONE";
-				}
-				else{
-				answer.erase(answer.size() - 1);
+				}else{
+				    answer.erase(answer.size() - 1);
 				}
 			}
-		}
-		else{
+		}else{
 			int effectedData =  db->Excute(query.c_str());
 
 			if (effectedData < 0){

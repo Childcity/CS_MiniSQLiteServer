@@ -3,6 +3,7 @@
 #define CS_MINISQLITESERVER_CSERVER_H
 
 #include "CClientSession.h"
+#include "CBusinessLogic.h"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
