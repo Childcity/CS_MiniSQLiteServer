@@ -37,25 +37,40 @@ private:
 class CBusinessLogic {
 public:
     explicit CBusinessLogic()
-        : placeFree_("0")
+        : placeFree_("-1")
     {}
 
     CBusinessLogic(CBusinessLogic const&) = delete;
     CBusinessLogic operator=(CBusinessLogic const&) = delete;
 
-    string getPlaceFree() const{
-        return "";
+    void checkPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &selectQuert_sql) {
+        if(placeFree_ == "-1"){
+            selectPlaceFree(dbPtr, selectQuert_sql);
+        }
     }
 
-    void updatePlaceFree(const CSQLiteDB::ptr &dbPtr, const string query){
-        string result, errorMsg;
+    string getPlaceFree() const{
+        //NOT exclusive access to data! Allows only read, not write!
+        boost::shared_lock< boost::shared_mutex > lock(bl_);
+        return placeFree_;
+    }
+
+    void updatePlaceFree(const CSQLiteDB::ptr &dbPtr, const string &updateQuery_sql, const string &selectQuery_sql){
 
         //TODO: send update comm
+
+        selectPlaceFree(dbPtr, selectQuery_sql);
+    }
+
+private:
+
+    void selectPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &selectQuert_sql){
+        string result, errorMsg;
 
         IResult *res = dbPtr->ExcuteSelect("select PlaceFree from Config");
 
         if (nullptr == res){
-            errorMsg = "ERROR: can't get 'PlaceFree'";
+            errorMsg = "ERROR: can't select 'PlaceFree'";
             LOG(WARNING) << errorMsg;
             throw BusinessLogicError(errorMsg);
         } else {
@@ -73,7 +88,7 @@ public:
             if(result.empty()){
                 result = "ERROR: db returned empty string";
                 LOG(WARNING) << errorMsg;
-                return;
+                throw BusinessLogicError(errorMsg);
             }
 //            else{
 //                result.erase(result.size() - 1);
@@ -90,15 +105,14 @@ public:
                 throw BusinessLogicError(errorMsg);
             }
 
-            boost::recursive_mutex::scoped_lock bl_;
+            //exclusive access to data!
+            boost::unique_lock<boost::shared_mutex> lock(bl_);
 
             placeFree_ = result;
         }
     }
 
-private:
-
-    mutable boost::recursive_mutex bl_;
+    mutable boost::shared_mutex bl_;
     string placeFree_;
 };
 
