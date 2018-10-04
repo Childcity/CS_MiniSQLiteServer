@@ -38,6 +38,7 @@ class CBusinessLogic {
 public:
     explicit CBusinessLogic()
         : placeFree_("-1")
+        , backupProgress_(-1)
     {}
 
     CBusinessLogic(CBusinessLogic const&) = delete;
@@ -120,8 +121,15 @@ private:
         }
     }
 
+    void backupDb(){
+
+    }
+
+private:
     mutable boost::shared_mutex bl_;
     string placeFree_;
+
+    int backupProgress_;
 };
 
 
