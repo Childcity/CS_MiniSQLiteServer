@@ -19,6 +19,7 @@ public:
 		, io_context_(io_context)
 		, thread_num_(thread_num)
 		, maxTimeout_(maxTimeout)
+        , businessLogic_(new CBusinessLogic)
 	{ Start(); }
 
 	explicit CServer(io_context& io_context, const size_t maxTimeout, const std::string &ipAddress, unsigned short port, unsigned short thread_num)
@@ -38,11 +39,14 @@ private:
 
 	void start_listen();
 
+private:
 	io_context &io_context_;
 	tcp::acceptor acceptor_;
 	boost::thread_group threads;
 	short thread_num_;
 	const size_t maxTimeout_;
+
+    boost::shared_ptr<CBusinessLogic> businessLogic_;
 };
 
 #endif //CS_MINISQLITESERVER_CSERVER_H

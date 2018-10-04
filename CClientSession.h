@@ -5,6 +5,7 @@
 #include "main.h"
 #include "CSQLiteDB.h"
 #include "glog/logging.h"
+#include "CBusinessLogic.h"
 
 #include <boost/bind.hpp>
 #include <boost/asio.hpp>
@@ -29,8 +30,9 @@ class CClientSession : public boost::enable_shared_from_this<CClientSession>
 							, boost::noncopyable{
 private:
 	typedef boost::system::error_code error_code;
+	using businessLogic_ptr = boost::shared_ptr<CBusinessLogic>;
 
-    explicit CClientSession(io_context &io_context, const size_t maxTimeout)
+    explicit CClientSession(io_context &io_context, const size_t maxTimeout, businessLogic_ptr businessLogic)
 		: sock_(io_context)
 		, started_(false)
 		, timer_(io_context)
@@ -50,7 +52,7 @@ public:
 	void start();
 
 	// class factory. scoped_array = Return ptr to this class
-	static ptr new_(io_context& io_context, size_t maxTimeout);
+	static ptr new_(io_context& io_context, size_t maxTimeout, businessLogic_ptr businessLogic);
 
 	// stop working with current client and remove it from clients
 	void stop();
@@ -117,6 +119,8 @@ private:
 	mutable  boost::recursive_mutex db_;
 	CSQLiteDB::ptr db;
 	const char separator = '|';
+
+    businessLogic_ptr businessLogic_;
 };
 
 #endif //CS_MINISQLITESERVER_CCLIENTSESSION_H

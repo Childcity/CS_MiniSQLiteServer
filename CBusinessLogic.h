@@ -27,7 +27,7 @@ public:
     explicit BusinessLogicError(const char *errorMsg) noexcept
             : msg_(std::move(std::string(errorMsg)))
     {}
-    const char *what() const throw() override{
+    const char *what() const noexcept override{
         return msg_.c_str();
     }
 private:
@@ -43,31 +43,39 @@ public:
     CBusinessLogic(CBusinessLogic const&) = delete;
     CBusinessLogic operator=(CBusinessLogic const&) = delete;
 
-    void checkPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &selectQuert_sql) {
+    void checkPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &selectQuery_sql) {
         if(placeFree_ == "-1"){
-            selectPlaceFree(dbPtr, selectQuert_sql);
+            //selectPlaceFree(dbPtr, "select PlaceFree from Config");
+            selectPlaceFree(dbPtr, selectQuery_sql);
         }
     }
 
-    string getPlaceFree() const{
+    string getCachedPlaceFree() const{
         //NOT exclusive access to data! Allows only read, not write!
         boost::shared_lock< boost::shared_mutex > lock(bl_);
         return placeFree_;
     }
 
     void updatePlaceFree(const CSQLiteDB::ptr &dbPtr, const string &updateQuery_sql, const string &selectQuery_sql){
+        string result;
 
-        //TODO: send update comm
+        int effectedData =  dbPtr->Excute(updateQuery_sql.c_str());
+
+        if (effectedData < 0){
+            result = std::string("ERROR: last error: " + dbPtr->GetLastError());
+            LOG(WARNING) << result;
+            throw BusinessLogicError(result);
+        }
 
         selectPlaceFree(dbPtr, selectQuery_sql);
     }
 
 private:
 
-    void selectPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &selectQuert_sql){
+    void selectPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &selectQuery_sql){
         string result, errorMsg;
 
-        IResult *res = dbPtr->ExcuteSelect("select PlaceFree from Config");
+        IResult *res = dbPtr->ExcuteSelect(selectQuery_sql.c_str());
 
         if (nullptr == res){
             errorMsg = "ERROR: can't select 'PlaceFree'";
@@ -76,6 +84,7 @@ private:
         } else {
             //Data
             while (res->Next()) {
+                // really only 1 column will be returned after qery
                 for (int i = 0; i < res->GetColumnCount(); i++){
                     const char *tmpRes = res->ColomnData(i);
                     result += (tmpRes ? std::move(string(tmpRes)): "None");
@@ -95,19 +104,18 @@ private:
 //            }
 
             //check, if return data is number
-            std::stringstream streamChecker(result);
-            size_t num;
-            streamChecker >> num;
-
-            if(num < 0){
-                errorMsg = "ERROR: can't convert '" + result + "' to number!";
-                LOG(WARNING) << errorMsg;
-                throw BusinessLogicError(errorMsg);
+            if(result != "0"){
+                size_t num = std::strtoull(result.c_str(), nullptr, 10 ); //this func return 0 if can't convert to size_t
+                if(num <= 0 || num == ULONG_MAX){
+                    errorMsg = "ERROR: can't convert '" + result + "' to number!";
+                    LOG(WARNING) << errorMsg;
+                    throw BusinessLogicError(errorMsg);
+                }
             }
+
 
             //exclusive access to data!
             boost::unique_lock<boost::shared_mutex> lock(bl_);
-
             placeFree_ = result;
         }
     }
