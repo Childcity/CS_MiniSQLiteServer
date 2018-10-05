@@ -61,11 +61,67 @@ public:
 
     /*This Method called when SELECT sqlQuery to be excuted.
     Return RESULTSET class pointer on success else nullptr of failed*/
-    IResult *ExcuteSelect(const char *sqlQuery);
+    IResult *ExecuteSelect(const char *sqlQuery);
 
     /*This Method called when INSERT/DELETE/UPDATE sqlQuery to be excuted.
     Return int count of effected data on success*/
-    int Excute(const char *sqlQuery);
+    int Execute(const char *sqlQuery);
+
+    /*This Method for backup Db*/
+    bool backupDb(
+            const char *zFilename,                                      /* Name of file to back up to */
+            const std::function<void(const int, const int)> &xProgress  /* Progress function to invoke */
+    ){
+        int rc = 0;                           /* Function return code */
+        sqlite3 *pFile = nullptr;             /* Database connection opened on zFilename */
+        sqlite3_backup *pBackup = nullptr;    /* Backup handle used to copy data */
+
+        /* Open the database file identified by zFilename. */
+        rc = sqlite3_open(zFilename, &pFile);
+        if( rc == SQLITE_OK ){
+
+            /* Open the sqlite3_backup object used to accomplish the transfer */
+            pBackup = sqlite3_backup_init(pFile, "main", pSQLiteConn->pCon, "main");
+            if( pBackup ){
+                /* Each iteration of this loop copies 10 database pages from database
+                ** pDb to the backup database. If the return value of backup_step()
+                ** indicates that there are still further pages to copy, sleep for
+                ** 250 ms before repeating. */
+                do {
+                    rc = sqlite3_backup_step(pBackup, 10);
+                    if(xProgress != nullptr){
+                        xProgress(sqlite3_backup_remaining(pBackup), sqlite3_backup_pagecount(pBackup));
+                    }
+
+                    if( rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED ){
+                        //TODO: maybe this sleep is not needed, because all insert/update will go in temp file, but select can be executed from another connection
+                        sqlite3_sleep(250);
+                    }
+                } while( rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED );
+
+                /* Release resources allocated by backup_init(). */
+                (void)sqlite3_backup_finish(pBackup);
+            }
+
+            // Checking results
+            rc = sqlite3_errcode(pFile);
+
+            if( rc != SQLITE_OK ) {
+                strLastError_ = "backup error: " + string(sqlite3_errstr(rc)); //sqlite3_errmsg(pSQLiteConn->pCon)
+                LOG(WARNING) << "SQLITE: backup error!";
+                return false;
+            }
+        }else{
+            strLastError_ = "can't start backup: " + string(sqlite3_errstr(rc)); //sqlite3_errmsg(pSQLiteConn->pCon);
+            LOG(WARNING) << "SQLITE: can't open file for backup!";
+            return false;
+        }
+
+        /* Close the database connection opened on database file zFilename
+        ** and return the result of this function. */
+        (void)sqlite3_close(pFile);
+        return true;
+    }
 
     /*Get Last Error of excution*/
     string GetLastError();

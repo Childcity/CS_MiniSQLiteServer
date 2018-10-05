@@ -75,7 +75,7 @@ bool CSQLiteDB::OpenConnection()
     return bConnected_;
 }
 
-IResult *CSQLiteDB::ExcuteSelect(const char *sqlQuery)
+IResult *CSQLiteDB::ExecuteSelect(const char *sqlQuery)
 {
     if( ! isConnected())
         return nullptr;
@@ -95,7 +95,7 @@ IResult *CSQLiteDB::ExcuteSelect(const char *sqlQuery)
 }
 
 
-int CSQLiteDB::Excute(const char *sqlQuery)
+int CSQLiteDB::Execute(const char *sqlQuery)
 {
     if(!isConnected())
         return -1;

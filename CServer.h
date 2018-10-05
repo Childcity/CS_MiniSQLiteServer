@@ -8,6 +8,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/thread.hpp>
+#include <boost/make_shared.hpp>
 
 using namespace boost::asio;
 using boost::asio::ip::tcp;
@@ -19,7 +20,7 @@ public:
 		, io_context_(io_context)
 		, thread_num_(thread_num)
 		, maxTimeout_(maxTimeout)
-        , businessLogic_(new CBusinessLogic)
+        , businessLogic_(boost::make_shared<CBusinessLogic>())
 	{ Start(); }
 
 	explicit CServer(io_context& io_context, const size_t maxTimeout, const std::string &ipAddress, unsigned short port, unsigned short thread_num)
@@ -27,6 +28,7 @@ public:
 		, io_context_(io_context)
 		, thread_num_(thread_num)
 		, maxTimeout_(maxTimeout)
+        , businessLogic_(boost::make_shared<CBusinessLogic>())
 	{ Start(); }
 	
 	CServer(CServer const&) = delete;

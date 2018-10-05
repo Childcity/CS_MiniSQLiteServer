@@ -34,12 +34,15 @@ private:
     std::string msg_;
 };
 
-class CBusinessLogic {
+class CBusinessLogic : public boost::enable_shared_from_this<CBusinessLogic>
+        , boost::noncopyable {
 public:
     explicit CBusinessLogic()
         : placeFree_("-1")
         , backupProgress_(-1)
-    {}
+    {VLOG(1) <<"DEBUG: create CBusinessLogic";}
+
+    virtual ~CBusinessLogic(){VLOG(1) <<"DEBUG: free CBusinessLogic";}
 
     CBusinessLogic(CBusinessLogic const&) = delete;
     CBusinessLogic operator=(CBusinessLogic const&) = delete;
@@ -60,10 +63,10 @@ public:
     void updatePlaceFree(const CSQLiteDB::ptr &dbPtr, const string &updateQuery_sql, const string &selectQuery_sql){
         string result;
 
-        int effectedData =  dbPtr->Excute(updateQuery_sql.c_str());
+        int effectedData =  dbPtr->Execute(updateQuery_sql.c_str());
 
         if (effectedData < 0){
-            result = std::string("ERROR: last error: " + dbPtr->GetLastError());
+            result = std::string("ERROR: effected data < 0! : " + dbPtr->GetLastError());
             LOG(WARNING) << result;
             throw BusinessLogicError(result);
         }
@@ -71,12 +74,51 @@ public:
         selectPlaceFree(dbPtr, selectQuery_sql);
     }
 
+    int backupDb(const CSQLiteDB::ptr &dbPtr, const string &backupPath){
+        bool backupStatus;
+
+        //If someone of existing clients start backup process, return progress3
+        {
+            boost::shared_lock< boost::shared_mutex > lock(bl_); //NOT exclusive access to data! Allows only read, not write!
+            if(backupProgress_ != -1){
+                return backupProgress_;
+            }
+        }
+
+        auto self = shared_from_this();
+        backupStatus = dbPtr->backupDb(backupPath.c_str(), [self, this](const int remaining, const int total){
+                //exclusive access to data!
+                boost::unique_lock<boost::shared_mutex> lock(bl_);
+                backupProgress_ = static_cast<const int>(100) * (total - remaining) / total;
+                if(backupProgress_ == 100)
+                    backupProgress_ = 99;
+                VLOG(1) << "DEBUG: backup in progress [" <<backupProgress_ <<"%]";
+            });
+
+        if(! backupStatus){
+            return -1;
+        }
+
+        boost::unique_lock<boost::shared_mutex> lock(bl_);
+        backupProgress_ = 100;
+        return 100;
+    }
+
+    int getBackUpProgress() const{
+        boost::shared_lock< boost::shared_mutex > lock(bl_); //NOT exclusive access to data! Allows only read, not write!
+        return backupProgress_;
+    }
+
+    void resetBackUpProgress(){
+        backupProgress_ = -1;
+    }
+
 private:
 
     void selectPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &selectQuery_sql){
         string result, errorMsg;
 
-        IResult *res = dbPtr->ExcuteSelect(selectQuery_sql.c_str());
+        IResult *res = dbPtr->ExecuteSelect(selectQuery_sql.c_str());
 
         if (nullptr == res){
             errorMsg = "ERROR: can't select 'PlaceFree'";
@@ -119,10 +161,6 @@ private:
             boost::unique_lock<boost::shared_mutex> lock(bl_);
             placeFree_ = result;
         }
-    }
-
-    void backupDb(){
-
     }
 
 private:

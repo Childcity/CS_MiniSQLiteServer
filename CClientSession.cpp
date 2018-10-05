@@ -1,4 +1,5 @@
 ﻿#include "CClientSession.h"
+#include <utility>
 
 boost::recursive_mutex clients_cs;
 typedef boost::shared_ptr<CClientSession> client_ptr;
@@ -24,7 +25,7 @@ void CClientSession::start()
         timer.wait();
     });
     LOG_IF(WARNING, ! db->OpenConnection()) << "ERROR: can't connect to db: " <<db->GetLastError();
-    db->Excute(string(/*"PRAGMA journal_mode = WAL; */"PRAGMA encoding = \"UTF-8\"; "
+    db->Execute(string(/*"PRAGMA journal_mode = WAL; */"PRAGMA encoding = \"UTF-8\"; "
                                                       "PRAGMA foreign_keys = 1; PRAGMA page_size = " + std::to_string(blockOrClusterSize) + "; PRAGMA cache_size = -3000;").c_str());
 
     last_ping_ = boost::posix_time::microsec_clock::local_time();
@@ -34,7 +35,7 @@ void CClientSession::start()
 
 CClientSession::ptr CClientSession::new_(io_context& io_context, const size_t maxTimeout, businessLogic_ptr businessLogic)
 {
-    ptr new_(new CClientSession(io_context, maxTimeout, businessLogic));
+    ptr new_(new CClientSession(io_context, maxTimeout, std::move(businessLogic)));
     return new_;
 }
 
@@ -126,6 +127,46 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
             businessLogic_->checkPlaceFree(db, "select PlaceFree from Config");
             do_write(businessLogic_->getCachedPlaceFree());
         }
+        else if(0 == inMsg.find(u8"backup_db")){
+            auto self = shared_from_this();
+            io_context_.post([self, this](){
+                string msg;
+                int backUpStatus = businessLogic_->backupDb(db, "~/bak.db3");
+
+                if(-1 == backUpStatus){
+                    msg = "ERROR: db was not backuped: " + db->GetLastError();
+                    LOG(WARNING) << msg;
+                }else if(100 == backUpStatus){
+                    //TODO: start acync insert cached data!!!
+                    msg = "backup db complete [100%]";
+                    LOG(INFO) << "DEBUG: " <<msg;
+                    do_write(msg);
+                }else if(backUpStatus > 0 && backUpStatus < 100){
+                    msg = "backup in progress [" + std::to_string(businessLogic_->getBackUpProgress()) + "%]";
+                    VLOG(1) << "DEBUG: " <<msg;
+                }
+
+                do_write(msg);
+             });
+        }
+        else if(0 == inMsg.find(u8"get_db_backup_progress")){
+            string msg;
+            int progress = businessLogic_->getBackUpProgress();
+
+            if(progress == -1){
+                msg = "backup not started";
+            }else{
+                msg = "backup in progress [" + std::to_string(progress) + "%]";
+            }
+
+            VLOG(1) << "DEBUG: " <<msg;
+            do_write(msg);
+        }
+        else if(0 == inMsg.find(u8"get_db_backup")){
+            //TODO: sending bak
+            //TODO: delete bak
+            //TODO: reset progress
+        }
         else if(0 == inMsg.find(u8"login ")){
             on_login(inMsg);
         }
@@ -151,7 +192,11 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 
     }catch (BusinessLogicError &e){
         LOG(WARNING) <<"BusinessLogic error [" <<e.what() <<"]";
-        do_write(e.what());
+
+        //if error occur, send last PlaceFree. If last PlaceFree == -1, send 0
+        do_write(businessLogic_->getCachedPlaceFree() == "-1" ? "0" : businessLogic_->getCachedPlaceFree());
+
+        //do_write(e.what());
     }
 
 }
@@ -268,7 +313,7 @@ void CClientSession::do_ask_db(string &query)
         //check if query is 'select' or 'insert/update...'
         if((query.find("select") < 10) || (query.find("SELECT") < 10)){
             //Get Data From DB
-            IResult *res = db->ExcuteSelect(query.c_str());
+            IResult *res = db->ExecuteSelect(query.c_str());
 
             if (nullptr == res){
                 answer = "ERROR: undefined";
@@ -301,10 +346,16 @@ void CClientSession::do_ask_db(string &query)
                 }
             }
         }else{
-            int effectedData =  db->Excute(query.c_str());
+
+            if(-1 != businessLogic_->getBackUpProgress()){
+                //TODO write to tmp db
+                VLOG(1) <<"Insert while backuping! Backup db will be restarted!!";
+            }
+
+            int effectedData =  db->Execute(query.c_str());
 
             if (effectedData < 0){
-                answer = std::string("ERROR: last error: " + db->GetLastError());
+                answer = std::string("ERROR: effected data < 0! : " + db->GetLastError());
                 LOG(WARNING) << answer;
             }
             else{

@@ -16,7 +16,7 @@
 #include <string>
 #include <iostream>
 #include <algorithm>
-
+#include <utility>
 
 using namespace boost::asio;
 using namespace boost::posix_time;
@@ -42,6 +42,7 @@ private:
 		, io_context_(io_context)
 		, write_buffer_({ new char[MAX_WRITE_BUFFER] })
 		, read_buffer_({ new char[MAX_READ_BUFFER] })
+        , businessLogic_(std::move(businessLogic))
 	{}
 
 public:

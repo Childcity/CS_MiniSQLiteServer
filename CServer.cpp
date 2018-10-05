@@ -8,7 +8,7 @@ void CServer::Start()
 	LOG(INFO) << "Server started at: " << acceptor_.local_endpoint() << std::endl;
 
 	// init first client
-	VLOG(1) << "DEBUG: init first client" << std::endl;
+	VLOG(1) << "DEBUG: init first client";
 	CClientSession::ptr client = CClientSession::new_(io_context_, maxTimeout_, businessLogic_);
 
 	// accept first client
@@ -16,7 +16,7 @@ void CServer::Start()
 	acceptor_.async_accept(client->sock(), bind(&CServer::do_accept, this, client, _1));
 
 	// start listen
-	VLOG(1) << "DEBUG: start listening" << std::endl;
+	VLOG(1) << "DEBUG: start listening";
 	start_listen();
 
 	threads.join_all(); 
