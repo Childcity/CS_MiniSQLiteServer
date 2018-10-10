@@ -50,7 +50,7 @@ private:
 
 public:
 
-    virtual ~CSQLiteDB(){VLOG(1) <<"By, db!!!";}
+    virtual ~CSQLiteDB(){/*VLOG(1) <<"By, db!!!";//*/}
 
     typedef shared_ptr<CSQLiteDB> ptr;
 
@@ -88,14 +88,14 @@ public:
                 ** indicates that there are still further pages to copy, sleep for
                 ** 250 ms before repeating. */
                 do {
-                    rc = sqlite3_backup_step(pBackup, 10);
+                    rc = sqlite3_backup_step(pBackup, 2048);
                     if(xProgress != nullptr){
                         xProgress(sqlite3_backup_remaining(pBackup), sqlite3_backup_pagecount(pBackup));
                     }
 
                     if( rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED ){
                         //TODO: maybe this sleep is not needed, because all insert/update will go in temp file, but select can be executed from another connection
-                        sqlite3_sleep(250);
+                        sqlite3_sleep(150);
                     }
                 } while( rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED );
 
@@ -108,12 +108,12 @@ public:
 
             if( rc != SQLITE_OK ) {
                 strLastError_ = "backup error: " + string(sqlite3_errstr(rc)); //sqlite3_errmsg(pSQLiteConn->pCon)
-                LOG(WARNING) << "SQLITE: backup error!";
+                LOG(WARNING) << "SQLITE: " <<strLastError_;
                 return false;
             }
         }else{
             strLastError_ = "can't start backup: " + string(sqlite3_errstr(rc)); //sqlite3_errmsg(pSQLiteConn->pCon);
-            LOG(WARNING) << "SQLITE: can't open file for backup!";
+            LOG(WARNING) << "SQLITE: " <<strLastError_;
             return false;
         }
 

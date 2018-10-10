@@ -40,9 +40,9 @@ public:
     explicit CBusinessLogic()
         : placeFree_("-1")
         , backupProgress_(-1)
-    {VLOG(1) <<"DEBUG: create CBusinessLogic";}
+    {/*static int instCount = 0; instCount++;VLOG(1) <<instCount;*/}
 
-    virtual ~CBusinessLogic(){VLOG(1) <<"DEBUG: free CBusinessLogic";}
+     ~CBusinessLogic(){/*VLOG(1) <<"DEBUG: free CBusinessLogic";*/}
 
     CBusinessLogic(CBusinessLogic const&) = delete;
     CBusinessLogic operator=(CBusinessLogic const&) = delete;
@@ -85,6 +85,12 @@ public:
             }
         }
 
+        {
+            boost::unique_lock<boost::shared_mutex> lock(bl_);
+            backupProgress_ = 0;
+        }
+
+
         auto self = shared_from_this();
         backupStatus = dbPtr->backupDb(backupPath.c_str(), [self, this](const int remaining, const int total){
                 //exclusive access to data!
@@ -96,6 +102,7 @@ public:
             });
 
         if(! backupStatus){
+            resetBackUpProgress();
             return -1;
         }
 
@@ -110,6 +117,7 @@ public:
     }
 
     void resetBackUpProgress(){
+        boost::unique_lock<boost::shared_mutex> lock(bl_);
         backupProgress_ = -1;
     }
 

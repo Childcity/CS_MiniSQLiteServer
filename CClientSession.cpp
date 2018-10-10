@@ -122,6 +122,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 
         if(0 == inMsg.find(u8"UPDATE Config SET PlaceFree")){
             businessLogic_->updatePlaceFree(db, inMsg, "select PlaceFree from Config;");
+            do_write("NONE");
         }
         else if(0 == inMsg.find(u8"get_place_free")){
             businessLogic_->checkPlaceFree(db, "select PlaceFree from Config");
@@ -130,20 +131,30 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
         else if(0 == inMsg.find(u8"backup_db")){
             auto self = shared_from_this();
             io_context_.post([self, this](){
-                string msg;
-                int backUpStatus = businessLogic_->backupDb(db, "~/bak.db3");
 
+                int backUpStatus = businessLogic_->getBackUpProgress();
+
+                //check if if backuping is executing. (!= -1). If not, send 0% and start backup
                 if(-1 == backUpStatus){
+                    string startBackupMsg = "backup in progress [0%]";
+                    VLOG(1) << "DEBUG: " <<startBackupMsg;
+                    do_write(startBackupMsg);
+                    //block this thread and make backup
+                    backUpStatus = businessLogic_->backupDb(db, bakDbPath);
+                }
+
+                string msg;
+                if(-1 == backUpStatus){
+                    //this will be executed after backup is finished with error
                     msg = "ERROR: db was not backuped: " + db->GetLastError();
                     LOG(WARNING) << msg;
                 }else if(100 == backUpStatus){
                     //TODO: start acync insert cached data!!!
                     msg = "backup db complete [100%]";
-                    LOG(INFO) << "DEBUG: " <<msg;
-                    do_write(msg);
+                    //LOG(INFO) << "DEBUG: " <<msg;
                 }else if(backUpStatus > 0 && backUpStatus < 100){
                     msg = "backup in progress [" + std::to_string(businessLogic_->getBackUpProgress()) + "%]";
-                    VLOG(1) << "DEBUG: " <<msg;
+                    //VLOG(1) << "DEBUG: " <<msg;
                 }
 
                 do_write(msg);
@@ -165,7 +176,8 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
         else if(0 == inMsg.find(u8"get_db_backup")){
             //TODO: sending bak
             //TODO: delete bak
-            //TODO: reset progress
+            businessLogic_->resetBackUpProgress();
+            do_write("Backup was send!");
         }
         else if(0 == inMsg.find(u8"login ")){
             on_login(inMsg);
@@ -401,6 +413,11 @@ void CClientSession::do_write(const string &msg)
 {
     if( !started() )
         return;
+
+    {
+        boost::recursive_mutex::scoped_lock lk(cs_);
+        ZeroMemory(write_buffer_.get(), sizeof(char) * MAX_WRITE_BUFFER);
+    }
 
     std::copy(msg.begin(), msg.end(), write_buffer_.get());
 

@@ -20,6 +20,7 @@ private:
         explicit KeyBindings(string exePath);
 
 		string dbPath;
+        string bakDbPath;
 		long blockOrClusterSize;
 		long waitTimeMillisec;
 		long countOfEttempts;

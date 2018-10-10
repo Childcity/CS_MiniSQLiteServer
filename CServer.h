@@ -30,7 +30,7 @@ public:
 		, maxTimeout_(maxTimeout)
         , businessLogic_(boost::make_shared<CBusinessLogic>())
 	{ Start(); }
-	
+
 	CServer(CServer const&) = delete;
 	CServer operator=(CServer const&) = delete;
 
