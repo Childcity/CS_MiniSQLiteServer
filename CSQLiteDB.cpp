@@ -155,13 +155,13 @@ bool CSQLiteDB::Next()
         LOG(WARNING) << "SQLITE: sqlite3_step returned missuse on handle(" << pSQLiteConn->pStmt <<")";
         pSQLiteConn->ReleaseStmt();
         return false;
-    }
-    else if( rc == SQLITE_DONE ){
+
+    }else if( rc == SQLITE_DONE ){
         return false;
-    }
-    else if( rc != SQLITE_ROW ){
+
+    }else if( rc != SQLITE_ROW ){
         strLastError_ = "sqlite3_step returned with error_code(" + std::to_string(rc) +")";
-        LOG(WARNING) << "SQLITE: sqlite3_step returned with error_code(" << rc <<" on handle(" << pSQLiteConn->pStmt <<")";
+        LOG(WARNING) << "SQLITE: " + strLastError_ + " on handle(" << pSQLiteConn->pStmt <<")";
         pSQLiteConn->ReleaseStmt();
         return false;
     }
@@ -299,3 +299,5 @@ bool CSQLiteDB::EndTransaction() {
 
     return true;
 }
+
+CSQLiteDB::~CSQLiteDB() {/*VLOG(1) <<"By, db!!!";//*/}

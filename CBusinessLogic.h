@@ -92,7 +92,7 @@ public:
 
 
         auto self = shared_from_this();
-        backupStatus = dbPtr->backupDb(backupPath.c_str(), [self, this](const int remaining, const int total){
+        backupStatus = dbPtr->BackupDb(backupPath.c_str(), [self, this](const int remaining, const int total){
                 //exclusive access to data!
                 boost::unique_lock<boost::shared_mutex> lock(bl_);
                 backupProgress_ = static_cast<const int>(100) * (total - remaining) / total;

@@ -321,7 +321,7 @@ void CClientSession::do_ask_db(string &query)
         if(! db->OpenConnection()){
             answer = "ERROR: " + db->GetLastError();
         }
-    } else{
+    }else{
         //check if query is 'select' or 'insert/update...'
         if((query.find("select") < 10) || (query.find("SELECT") < 10)){
             //Get Data From DB

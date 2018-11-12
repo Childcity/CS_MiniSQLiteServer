@@ -50,7 +50,7 @@ private:
 
 public:
 
-    virtual ~CSQLiteDB(){/*VLOG(1) <<"By, db!!!";//*/}
+    virtual ~CSQLiteDB();
 
     typedef shared_ptr<CSQLiteDB> ptr;
 
@@ -68,7 +68,7 @@ public:
     int Execute(const char *sqlQuery);
 
     /*This Method for backup Db*/
-    bool backupDb(
+    bool BackupDb(
             const char *zFilename,                                      /* Name of file to back up to */
             const std::function<void(const int, const int)> &xProgress  /* Progress function to invoke */
     ){
@@ -120,6 +120,36 @@ public:
         /* Close the database connection opened on database file zFilename
         ** and return the result of this function. */
         (void)sqlite3_close(pFile);
+        return true;
+    }
+
+    /*Check Db on errors. If ok, return true, else return false and set last error str*/
+    bool IntegrityCheck(){
+        IResult *res = ExecuteSelect("PRAGMA integrity_check;");
+
+        if (nullptr == res){
+            strLastError_ = "integrity_check returned with NULL";
+            LOG(WARNING) << "SQLITE: " << strLastError_;
+            return false;
+        }
+
+        //Data
+        string integrityCheckResult;
+        while (res->Next()) {
+            const char *tmpRes = res->ColomnData(0);
+            integrityCheckResult += (tmpRes ? std::move(string(tmpRes)): "");
+            integrityCheckResult.resize(integrityCheckResult.size() - 1);
+            integrityCheckResult += '\n';
+        }
+        //release Result Data
+        res->ReleaseStatement();
+VLOG(1) <<"PRAGMA integrity_check: " <<integrityCheckResult;
+        if(integrityCheckResult.substr(0, 2) != "ok"){
+            LOG(WARNING) << "SQLITE: " << strLastError_;
+            return false;
+        }
+
+
         return true;
     }
 
