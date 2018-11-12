@@ -57,7 +57,7 @@ public:
     /*Class factory. This method create shared pointer to CSQLiteDB.*/
     static ptr new_(string databasePath, size_t sqlEttempts = 200, size_t sqlWaitTime = 50);
 
-    bool OpenConnection();
+    bool OpenConnection(int flags = SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE);
 
     /*This Method called when SELECT sqlQuery to be excuted.
     Return RESULTSET class pointer on success else nullptr of failed*/

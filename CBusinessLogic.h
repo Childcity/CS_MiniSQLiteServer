@@ -135,6 +135,29 @@ public:
         backupProgress_ = -1;
     }
 
+    static CSQLiteDB::ptr createOrPrepareTmpDb(){
+        // check if tmp db exists
+        static const string tmpDbPath("temp_db.sqlite3");
+
+        const auto tmpDb = CSQLiteDB::new_(tmpDbPath);
+
+        if(! tmpDb->OpenConnection(SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE)){
+            LOG(INFO) <<"Can't connect to " <<tmpDbPath <<": " <<tmpDb->GetLastError();
+            LOG(INFO) <<"Trying to create new " <<tmpDbPath;
+
+            //create new db. If can't create, return;
+            if(! tmpDb->OpenConnection(SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE)){
+                LOG(WARNING) <<"ERROR: Can't create or connect to " <<tmpDbPath <<": " <<tmpDb->GetLastError();
+                return nullptr;
+            }
+
+            tmpDb->Execute("creat");
+        }
+
+        //TODO: execute existing query
+
+    }
+
 private:
 
     void selectPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &selectQuery_sql){

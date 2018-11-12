@@ -48,7 +48,7 @@ bool   CSQLiteDB::isConnected()
     return bConnected_;
 }
 
-bool CSQLiteDB::OpenConnection()
+bool CSQLiteDB::OpenConnection(int flags)
 {
     if(bConnected_)
         return bConnected_;
