@@ -98,6 +98,10 @@ private:
 
 	void do_write(const string &msg);
 
+	void do_db_backup();
+
+	void do_ask_db_backup_progress();
+
 private:
 
 	mutable boost::recursive_mutex cs_;

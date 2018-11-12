@@ -301,3 +301,85 @@ bool CSQLiteDB::EndTransaction() {
 }
 
 CSQLiteDB::~CSQLiteDB() {/*VLOG(1) <<"By, db!!!";//*/}
+
+bool CSQLiteDB::IntegrityCheck() {
+    IResult *res = ExecuteSelect("PRAGMA integrity_check;");
+
+    if (nullptr == res){
+        strLastError_ = "integrity_check returned with NULL";
+        LOG(WARNING) << "SQLITE: " << strLastError_;
+        return false;
+    }
+
+    //Data
+    string integrityCheckResult;
+    while (res->Next()) {
+        const char *tmpRes = res->ColomnData(0);
+        integrityCheckResult += (tmpRes ? std::move(string(tmpRes)): "");
+        //integrityCheckResult.resize(integrityCheckResult.size() - 1);
+        integrityCheckResult += '\n';
+    }
+    //release Result Data
+    res->ReleaseStatement();
+    VLOG(1) <<"Integrity check: " <<integrityCheckResult;
+
+    if(integrityCheckResult.substr(0, 2) != "ok"){
+        strLastError_ = integrityCheckResult;
+        return false;
+    }
+
+
+    return true;
+}
+
+bool CSQLiteDB::BackupDb(const char *zFilename, const std::function<void(const int, const int)> &xProgress) {
+    int rc = 0;                           /* Function return code */
+    sqlite3 *pFile = nullptr;             /* Database connection opened on zFilename */
+    sqlite3_backup *pBackup = nullptr;    /* Backup handle used to copy data */
+
+    /* Open the database file identified by zFilename. */
+    rc = sqlite3_open(zFilename, &pFile);
+    if( rc == SQLITE_OK ){
+
+        /* Open the sqlite3_backup object used to accomplish the transfer */
+        pBackup = sqlite3_backup_init(pFile, "main", pSQLiteConn->pCon, "main");
+        if( pBackup ){
+            /* Each iteration of this loop copies 10 database pages from database
+            ** pDb to the backup database. If the return value of backup_step()
+            ** indicates that there are still further pages to copy, sleep for
+            ** 250 ms before repeating. */
+            do {
+                rc = sqlite3_backup_step(pBackup, 2048);
+                if(xProgress != nullptr){
+                    xProgress(sqlite3_backup_remaining(pBackup), sqlite3_backup_pagecount(pBackup));
+                }
+
+                if( rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED ){
+                    //TODO: maybe this sleep is not needed, because all insert/update will go in temp file, but select can be executed from another connection
+                    sqlite3_sleep(100);
+                }
+            } while( rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED );
+
+            /* Release resources allocated by backup_init(). */
+            (void)sqlite3_backup_finish(pBackup);
+        }
+
+        // Checking results
+        rc = sqlite3_errcode(pFile);
+
+        if( rc != SQLITE_OK ) {
+            strLastError_ = "backup error: " + string(sqlite3_errstr(rc)); //sqlite3_errmsg(pSQLiteConn->pCon)
+            LOG(WARNING) << "SQLITE: " <<strLastError_;
+            return false;
+        }
+    }else{
+        strLastError_ = "can't start backup: " + string(sqlite3_errstr(rc)); //sqlite3_errmsg(pSQLiteConn->pCon);
+        LOG(WARNING) << "SQLITE: " <<strLastError_;
+        return false;
+    }
+
+    /* Close the database connection opened on database file zFilename
+    ** and return the result of this function. */
+    (void)sqlite3_close(pFile);
+    return true;
+}

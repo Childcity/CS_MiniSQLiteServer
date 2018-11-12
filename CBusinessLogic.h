@@ -42,7 +42,7 @@ public:
         , backupProgress_(-1)
     {/*static int instCount = 0; instCount++;VLOG(1) <<instCount;*/}
 
-     ~CBusinessLogic(){/*VLOG(1) <<"DEBUG: free CBusinessLogic";*/}
+     //~CBusinessLogic(){/*VLOG(1) <<"DEBUG: free CBusinessLogic";*/}
 
     CBusinessLogic(CBusinessLogic const&) = delete;
     CBusinessLogic operator=(CBusinessLogic const&) = delete;
@@ -106,7 +106,19 @@ public:
             return -1;
         }
 
-        //dbPtr->Execute("PRAGMA integrity_check; ");
+        // check backup on error (integrity check)
+        const auto backUpDb = CSQLiteDB::new_(backupPath);
+        if(! backUpDb->OpenConnection()){
+            LOG(WARNING) << "ERROR: can't connect to backup db for 'integrity check': " <<backUpDb->GetLastError();
+            resetBackUpProgress();
+            return -1;
+        }
+
+        if(! backUpDb->IntegrityCheck()){
+            LOG(WARNING) << "ERROR: 'integrity check' failed ";
+            resetBackUpProgress();
+            return -1;
+        }
 
         boost::unique_lock<boost::shared_mutex> lock(bl_);
         backupProgress_ = 100;

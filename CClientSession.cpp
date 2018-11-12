@@ -123,81 +123,45 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
         if(0 == inMsg.find(u8"UPDATE Config SET PlaceFree")){
             businessLogic_->updatePlaceFree(db, inMsg, "select PlaceFree from Config;");
             do_write("NONE");
-        }
-        else if(0 == inMsg.find(u8"get_place_free")){
-            businessLogic_->checkPlaceFree(db, "select PlaceFree from Config");
+
+        }else if(0 == inMsg.find(u8"get_place_free")){
+            businessLogic_->checkPlaceFree(db, "select PlaceFree from Config;");
             do_write(businessLogic_->getCachedPlaceFree());
-        }
-        else if(0 == inMsg.find(u8"backup_db")){
+
+        }else if(0 == inMsg.find(u8"backup_db")){
             auto self = shared_from_this();
-            io_context_.post([self, this](){
+            io_context_.post([self, this](){ //async call
+                do_db_backup();
+            });
 
-                int backUpStatus = businessLogic_->getBackUpProgress();
+        }else if(0 == inMsg.find(u8"get_db_backup_progress")){
+            do_ask_db_backup_progress();
 
-                //check if if backuping is executing. (!= -1). If not, send 0% and start backup
-                if(-1 == backUpStatus){
-                    string startBackupMsg = "backup in progress [0%]";
-                    VLOG(1) << "DEBUG: " <<startBackupMsg;
-                    do_write(startBackupMsg);
-                    //block this thread and make backup
-                    backUpStatus = businessLogic_->backupDb(db, bakDbPath);
-                }
-
-                string msg;
-                if(-1 == backUpStatus){
-                    //this will be executed after backup is finished with error
-                    msg = "ERROR: db was not backuped: " + db->GetLastError();
-                    LOG(WARNING) << msg;
-                }else if(100 == backUpStatus){
-                    //TODO: start acync insert cached data!!!
-                    msg = "backup db complete [100%]";
-                    LOG(INFO) << "DEBUG: " <<msg;
-                }else if(backUpStatus > 0 && backUpStatus < 100){
-                    msg = "backup in progress [" + std::to_string(businessLogic_->getBackUpProgress()) + "%]";
-                    //VLOG(1) << "DEBUG: " <<msg;
-                }
-
-                do_write(msg);
-             });
-        }
-        else if(0 == inMsg.find(u8"get_db_backup_progress")){
-            string msg;
-            int progress = businessLogic_->getBackUpProgress();
-
-            if(progress == -1){
-                msg = "backup not started";
-            }else{
-                msg = "backup in progress [" + std::to_string(progress) + "%]";
-            }
-
-            VLOG(1) << "DEBUG: " <<msg;
-            do_write(msg);
-        }
-        else if(0 == inMsg.find(u8"get_db_backup")){
+        }else if(0 == inMsg.find(u8"get_db_backup")){
             //TODO: sending bak
             //TODO: delete bak
             businessLogic_->resetBackUpProgress();
             do_write("Backup was send!");
-        }
-        else if(0 == inMsg.find(u8"login ")){
+
+        }else if(0 == inMsg.find(u8"login ")){
             on_login(inMsg);
-        }
-        else if(0 == inMsg.find(u8"ping")){
+
+        }else if(0 == inMsg.find(u8"ping")){
             on_ping();
-        }
-        else if(0 == inMsg.find(u8"who")){
+
+        }else if(0 == inMsg.find(u8"who")){
             on_clients();
-        }
-        else if(0 == inMsg.find(u8"fibo ")){
+
+        }else if(0 == inMsg.find(u8"fibo ")){
             on_fibo(inMsg);
-        }
-        else if(0 == inMsg.find(u8"exit")){
+
+        }else if(0 == inMsg.find(u8"exit")){
             stop();
-        }
-        else if(inMsg.size() > 10) {
+
+        }else if(inMsg.size() > 10) {
             on_query(inMsg);
-        }
-        else{
+
+        }else{
             do_write(string(u8"ERROR: very short command:") + inMsg + "\n");
             LOG(WARNING) << "very short command from client " << username() << ": '" << inMsg << '\'';
         }
@@ -423,6 +387,49 @@ void CClientSession::do_write(const string &msg)
 
     sock_.async_write_some(buffer(write_buffer_.get(), msg.size()),
                            bind(&CClientSession::on_write, shared_from_this(), _1, _2));
+}
+
+void CClientSession::do_db_backup() {
+    int backUpStatus = businessLogic_->getBackUpProgress();
+
+    //check if if backuping is executing. (!= -1). If not, send 0% and start backup
+    if(-1 == backUpStatus){
+        string startBackupMsg = "backup in progress [0%]";
+        VLOG(1) << "DEBUG: " <<startBackupMsg;
+        do_write(startBackupMsg);
+        //block this async func and make backup
+        backUpStatus = businessLogic_->backupDb(db, bakDbPath);
+    }
+
+    string msg;
+    if(-1 == backUpStatus){
+        //this will be executed after backup is finished with error
+        msg = "ERROR: db was not backuped: " + db->GetLastError();
+        LOG(WARNING) << msg;
+    }else if(100 == backUpStatus){
+        //TODO: start acync insert cached data!!!
+        msg = "backup db complete [100%]";
+        LOG(INFO) << "DEBUG: " <<msg;
+    }else if(backUpStatus > 0 && backUpStatus < 100){
+        msg = "backup in progress [" + std::to_string(businessLogic_->getBackUpProgress()) + "%]";
+        //VLOG(1) << "DEBUG: " <<msg;
+    }
+
+    do_write(msg);
+}
+
+void CClientSession::do_ask_db_backup_progress() {
+    string msg;
+    int progress = businessLogic_->getBackUpProgress();
+
+    if(progress == -1){
+        msg = "backup not started";
+    }else{
+        msg = "backup in progress [" + std::to_string(progress) + "%]";
+    }
+
+    VLOG(1) << "DEBUG: " <<msg;
+    do_write(msg);
 }
 
 void update_clients_changed()
