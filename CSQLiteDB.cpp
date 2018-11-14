@@ -112,7 +112,7 @@ int CSQLiteDB::Execute(const char *sqlQuery)
         strLastError_ = "error while executing statement, (prepare statement error/timeout): " + string(sqlite3_errmsg(pSQLiteConn->pCon));
         LOG(WARNING) << "SQLITE: error while executing statement (" << sqlite3_errmsg(pSQLiteConn->pCon) <<")";
         EndTransaction();
-        return 0;
+        return -1;
     }
 
     int rc = StepSql();
@@ -123,7 +123,7 @@ int CSQLiteDB::Execute(const char *sqlQuery)
                      << "Statement: " <<sqlQuery;
         pSQLiteConn->ReleaseStmt();
         EndTransaction();
-        return 0;
+        return -1;
     }
 
     pSQLiteConn->ReleaseStmt();

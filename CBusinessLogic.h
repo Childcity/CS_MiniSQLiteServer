@@ -135,7 +135,8 @@ public:
         backupProgress_ = -1;
     }
 
-    static CSQLiteDB::ptr createOrPrepareTmpDb(){
+    // throws /home/childcity/QtProjects/SimpleLanguageParserGUI.tar.xzBuisnessLogicError
+    static void createOrPrepareTmpDb(){
         // check if tmp db exists
         static const string tmpDbPath("temp_db.sqlite3");
 
@@ -147,12 +148,27 @@ public:
 
             //create new db. If can't create, return;
             if(! tmpDb->OpenConnection(SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE)){
-                LOG(WARNING) <<"ERROR: Can't create or connect to " <<tmpDbPath <<": " <<tmpDb->GetLastError();
-                return nullptr;
+                LOG(WARNING) <<"ERROR: can't create or connect to " <<tmpDbPath <<": " <<tmpDb->GetLastError();
+                throw BusinessLogicError("Temporary database can't be opened or created. Check permissions and free place on disk");
             }
 
-            tmpDb->Execute("creat");
+            //create table for temporary query strings
+            int res = tmpDb->Execute("CREATE TABLE tmp_querys(\n"
+                           "   id INT PRIMARY KEY     NOT NULL,\n"
+                           "   query          TEXT    NOT NULL,\n"
+                           "   timestamp      INT     NOT NULL,\n"
+                           ");");
+
+            if(res < 0){
+                string errMsg("Can't create table for temporary database");
+                LOG(WARNING) <<"ERROR: " <<errMsg;
+                throw BusinessLogicError(errMsg);
+            }
+
+            //created new db. Created table
+            return;
         }
+
 
         //TODO: execute existing query
 
