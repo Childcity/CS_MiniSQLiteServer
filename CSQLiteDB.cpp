@@ -321,7 +321,7 @@ bool CSQLiteDB::IntegrityCheck() {
     }
     //release Result Data
     res->ReleaseStatement();
-    VLOG(1) <<"Integrity check: " <<integrityCheckResult;
+    VLOG(1) <<"DEBUG: integrity check: " <<integrityCheckResult;
 
     if(integrityCheckResult.substr(0, 2) != "ok"){
         strLastError_ = integrityCheckResult;

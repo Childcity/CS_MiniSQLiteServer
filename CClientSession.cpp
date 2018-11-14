@@ -138,21 +138,42 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
             do_ask_db_backup_progress();
 
         }else if(0 == inMsg.find(u8"get_db_backup")){
-            //TODO: sending bak
-            businessLogic_->resetBackUpProgress();
+
+            bool isBackUpExist = false;
+            {// next thread will wait here, until current thread reseting backUpStatus if it 100%
+                boost::recursive_mutex::scoped_lock lk(clients_cs);
+                isBackUpExist = businessLogic_->getBackUpProgress() == 100; // backup exists if getBackUpProgress == 100%. Backup can be sent to a client only one time
+
+                if(isBackUpExist){
+                    businessLogic_->resetBackUpProgress();
+                }
+            }
+
+            if(! isBackUpExist){
+                LOG(INFO) <<"Client sent 'get_db_backup', but backup doesn't exist or have been sent to another client";
+                do_write("NONE: Backup doesn't exist, you can send 'backup_db' to create new and 'get_db_backup_progress' to check backup progress!");
+                return;
+            }
+
+            //TODO: sending  bak
             do_write("Backup was send!");
+            // after this server 'think' that backup doesn't exist!
 
             // start executing query from tmp db in background
             auto self = shared_from_this();
             io_context_.post([self, this](){ //async call
-                businessLogic_->syncDbWithTmp(db, [=](size_t ms){
-                    // Construct a timer without setting an expiry time.
-                    deadline_timer timer(io_context_);
-                    // Set an expiry time relative to now.
-                    timer.expires_from_now(boost::posix_time::millisec(ms));
-                    // Wait for the timer to expire.
-                    timer.wait();
-                });
+                try {
+                    businessLogic_->syncDbWithTmp(db, [=](size_t ms) {
+                        // Construct a timer without setting an expiry time.
+                        deadline_timer timer(io_context_);
+                        // Set an expiry time relative to now.
+                        timer.expires_from_now(boost::posix_time::millisec(ms));
+                        // Wait for the timer to expire.
+                        timer.wait();
+                    });
+                }catch (BusinessLogicError &e){
+                    LOG(WARNING) <<"Sync Error [" <<e.what() <<"]";
+                }
             });
 
         }else if(0 == inMsg.find(u8"login ")){
@@ -336,12 +357,13 @@ void CClientSession::do_ask_db(string &query)
         }else{
 
             int effectedData = 0;
+            int backUpProgress = businessLogic_->getBackUpProgress();
 
-            if(-1 != businessLogic_->getBackUpProgress()){
-                effectedData = businessLogic_->SaveQueryToTmpDb(query);
-                VLOG(1) <<"Insert to tmp while backuping. Effected data: " <<effectedData;
-            }else{
+            if(backUpProgress < 0 || backUpProgress == 100){
                 effectedData =  db->Execute(query.c_str());
+            }else{
+                effectedData = businessLogic_->SaveQueryToTmpDb(query);
+                VLOG(1) <<"DEBUG: insert to tmp while backuping. Effected data: " <<effectedData;
             }
 
 

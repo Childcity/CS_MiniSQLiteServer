@@ -146,16 +146,19 @@ public:
             throw BusinessLogicError(errMsg);
         }
 
-        IResult *res = nullptr;
+        IResult *res;
 
         // start execute querys from tmp db
 
-        int iterCount = 1;
+        int iterCount = 0;
         do{
-            iterCount++;
-            VLOG(1) <<iterCount;
+            res = nullptr;
+            waitFunc(200); //sleep to give other connections executed
 
-            res = tmpDb->ExecuteSelect("SELECT * FROM `tmp_querys` ORDER BY id ASC LIMIT 1;");
+            iterCount++;
+            VLOG(1) <<"DEBUG: tmp table iter: " <<iterCount;
+
+            res = tmpDb->ExecuteSelect("SELECT rowid, * FROM `tmp_querys` ORDER BY rowid ASC LIMIT 1;");
 
             if (nullptr == res){
                 string errorMsg = "ERROR: can't select row from 'tmp_querys'";
@@ -163,45 +166,47 @@ public:
                 throw BusinessLogicError(errorMsg);
             } else {
                 //Data
-                if (res->Next()) {
-                    // 3 column will be returned
-                    const char *id = res->ColomnData(0);
-                    const char *query = res->ColomnData(1);
-
-                    if((! id) || (! query)){
-                        string errorMsg = "ERROR: id or query == null'";
-                        LOG(WARNING) << errorMsg;
-                        continue;
-                    }
-
-                    VLOG(1) <<"id: " <<id <<" query: " <<query;
-
-                    // executing query from tmp table
-                    int queryResult = dbPtr->Execute(query);
-
-                    if(queryResult < 0){
-                        string errorMsg = "ERROR: can't execute query '" + string(query) + "' from tmp db: " + dbPtr->GetLastError();
-                        LOG(WARNING) << errorMsg;
-                    }
-
-                    VLOG(1) <<"query executed OK: " <<queryResult;
-
-                    // delete query from tmp db
-                    int deleteResult = tmpDb->Execute(string("DELETE FROM `tmp_querys` WHERE id = '" + string(id) + "';").c_str());
-
-                    if(deleteResult < 0){ //TODO: can be cicling!! If newer delete current row
-                        string errorMsg = "ERROR: can't delete row from tmp db: " + tmpDb->GetLastError();
-                        LOG(WARNING) << errorMsg;
-                    }
-
-                    VLOG(1) <<"delete row OK: " <<deleteResult;
+                if (! res->Next()) {
+                    //release Result Data
+                    res->ReleaseStatement();
+                    continue;
                 }
+
+                // 3 column will be returned
+                const string rowid = res->ColomnData(0);
+                const string query = res->ColomnData(1);
 
                 //release Result Data
                 res->ReleaseStatement();
 
-                //TODO: need to sleep for a while
-                waitFunc(200);
+                if(rowid.empty() || query.empty()){
+                    string errorMsg = "ERROR: rowid or query empty";
+                    LOG(WARNING) << errorMsg;
+                    continue;
+                }
+
+                VLOG(1) <<"DEBUG: rowid: " <<rowid <<" query: " <<query;
+
+                // executing query from tmp table
+                int queryResult = dbPtr->Execute(query.c_str());
+
+                if(queryResult < 0){
+                    string errorMsg = "ERROR: can't execute query '" + query + "' from tmp db: " + dbPtr->GetLastError();
+                    LOG(WARNING) << errorMsg;
+                }
+
+                VLOG(1) <<"DEBUG: query executed OK: " <<queryResult;
+
+                // delete query from tmp db
+                int deleteResult = tmpDb->Execute(string("DELETE FROM `tmp_querys` WHERE rowid = '" + rowid + "';").c_str());
+
+                if(deleteResult < 0){ //TODO: can be cicling!! If newer delete current row
+                    string errorMsg = "ERROR: can't delete row from tmp db: " + tmpDb->GetLastError();
+                    LOG(WARNING) << errorMsg;
+                }
+
+                VLOG(1) <<"DEBUG: delete row OK: " <<deleteResult;
+
             }
         }while(true);
     }
@@ -224,7 +229,6 @@ public:
 
             //create table for temporary query strings
             int res = tmpDb->Execute("CREATE TABLE tmp_querys(\n"
-                           "   id INT PRIMARY KEY     NOT NULL,\n"
                            "   query          TEXT    NOT NULL,\n"
                            "   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP\n"
                            ");");
