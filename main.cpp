@@ -104,6 +104,9 @@ void TestSqlite3Settings(CConfig *cfg){
     CSQLiteDB::ptr db = CSQLiteDB::new_(cfg->keyBindings.dbPath);
 	LOG_IF(FATAL, ! db->OpenConnection()) <<"Can't connect to '" << cfg->keyBindings.dbPath << "', check permission or file does not exist. System error: " << db->GetLastError();
 
+	// check tmp db or create new
+	CBusinessLogic::CreateOrUseOldTmpDb();
+
 	VLOG(1) <<"DEBUG: connection to db checked - everything is OK";
 }
 

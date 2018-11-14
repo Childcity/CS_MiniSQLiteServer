@@ -55,7 +55,7 @@ bool CSQLiteDB::OpenConnection(int flags)
 
     bConnected_ = true;
 
-    int rc = sqlite3_open_v2(pSQLiteConn->dbPath.c_str(), &pSQLiteConn->pCon, SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE, nullptr );
+    int rc = sqlite3_open_v2(pSQLiteConn->dbPath.c_str(), &pSQLiteConn->pCon, flags, nullptr );
 
     strLastError_ .clear();
 

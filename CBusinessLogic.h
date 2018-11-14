@@ -135,20 +135,90 @@ public:
         backupProgress_ = -1;
     }
 
-    // throws /home/childcity/QtProjects/SimpleLanguageParserGUI.tar.xzBuisnessLogicError
-    static void createOrPrepareTmpDb(){
+    // throws BuisnessLogicError
+    void syncDbWithTmp(const CSQLiteDB::ptr &dbPtr, const std::function<void(const size_t)> &waitFunc){
+
+        const auto tmpDb = CSQLiteDB::new_(getTmpDbPath());
+
+        if(! tmpDb->OpenConnection()) {
+            string errMsg("Can't connect to " + getTmpDbPath() + ": " + tmpDb->GetLastError());
+            LOG(WARNING) <<"ERROR: " <<errMsg;
+            throw BusinessLogicError(errMsg);
+        }
+
+        IResult *res = nullptr;
+
+        // start execute querys from tmp db
+
+        int iterCount = 1;
+        do{
+            iterCount++;
+            VLOG(1) <<iterCount;
+
+            res = tmpDb->ExecuteSelect("SELECT * FROM `tmp_querys` ORDER BY id ASC LIMIT 1;");
+
+            if (nullptr == res){
+                string errorMsg = "ERROR: can't select row from 'tmp_querys'";
+                LOG(WARNING) << errorMsg <<" Iter: " <<iterCount;
+                throw BusinessLogicError(errorMsg);
+            } else {
+                //Data
+                if (res->Next()) {
+                    // 3 column will be returned
+                    const char *id = res->ColomnData(0);
+                    const char *query = res->ColomnData(1);
+
+                    if((! id) || (! query)){
+                        string errorMsg = "ERROR: id or query == null'";
+                        LOG(WARNING) << errorMsg;
+                        continue;
+                    }
+
+                    VLOG(1) <<"id: " <<id <<" query: " <<query;
+
+                    // executing query from tmp table
+                    int queryResult = dbPtr->Execute(query);
+
+                    if(queryResult < 0){
+                        string errorMsg = "ERROR: can't execute query '" + string(query) + "' from tmp db: " + dbPtr->GetLastError();
+                        LOG(WARNING) << errorMsg;
+                    }
+
+                    VLOG(1) <<"query executed OK: " <<queryResult;
+
+                    // delete query from tmp db
+                    int deleteResult = tmpDb->Execute(string("DELETE FROM `tmp_querys` WHERE id = '" + string(id) + "';").c_str());
+
+                    if(deleteResult < 0){ //TODO: can be cicling!! If newer delete current row
+                        string errorMsg = "ERROR: can't delete row from tmp db: " + tmpDb->GetLastError();
+                        LOG(WARNING) << errorMsg;
+                    }
+
+                    VLOG(1) <<"delete row OK: " <<deleteResult;
+                }
+
+                //release Result Data
+                res->ReleaseStatement();
+
+                //TODO: need to sleep for a while
+                waitFunc(200);
+            }
+        }while(true);
+    }
+
+    // throws BuisnessLogicError
+    static void CreateOrUseOldTmpDb(){
+
+        const auto tmpDb = CSQLiteDB::new_(getTmpDbPath());
+
         // check if tmp db exists
-        static const string tmpDbPath("temp_db.sqlite3");
-
-        const auto tmpDb = CSQLiteDB::new_(tmpDbPath);
-
         if(! tmpDb->OpenConnection(SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE)){
-            LOG(INFO) <<"Can't connect to " <<tmpDbPath <<": " <<tmpDb->GetLastError();
-            LOG(INFO) <<"Trying to create new " <<tmpDbPath;
+            LOG(INFO) <<"Can't connect to " <<getTmpDbPath() <<": " <<tmpDb->GetLastError();
+            LOG(INFO) <<"Trying to create new " <<getTmpDbPath();
 
             //create new db. If can't create, return;
             if(! tmpDb->OpenConnection(SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE)){
-                LOG(WARNING) <<"ERROR: can't create or connect to " <<tmpDbPath <<": " <<tmpDb->GetLastError();
+                LOG(WARNING) <<"ERROR: can't create or connect to " <<getTmpDbPath() <<": " <<tmpDb->GetLastError();
                 throw BusinessLogicError("Temporary database can't be opened or created. Check permissions and free place on disk");
             }
 
@@ -156,7 +226,7 @@ public:
             int res = tmpDb->Execute("CREATE TABLE tmp_querys(\n"
                            "   id INT PRIMARY KEY     NOT NULL,\n"
                            "   query          TEXT    NOT NULL,\n"
-                           "   timestamp      INT     NOT NULL,\n"
+                           "   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP\n"
                            ");");
 
             if(res < 0){
@@ -166,12 +236,22 @@ public:
             }
 
             //created new db. Created table
-            return;
         }
 
+    }
 
-        //TODO: execute existing query
+    // throws BuisnessLogicError
+    static int SaveQueryToTmpDb(const string &query){
 
+        const auto tmpDb = CSQLiteDB::new_(getTmpDbPath());
+
+        if(! tmpDb->OpenConnection()) {
+            string errMsg("Can't connect to " + getTmpDbPath() + ": " + tmpDb->GetLastError());
+            LOG(WARNING) <<"ERROR: " <<errMsg;
+            throw BusinessLogicError(errMsg);
+        }
+
+        return tmpDb->Execute(string("INSERT INTO `tmp_querys` (query) VALUES ('" + query + "');").c_str());
     }
 
 private:
@@ -191,7 +271,7 @@ private:
                 // really only 1 column will be returned after qery
                 for (int i = 0; i < res->GetColumnCount(); i++){
                     const char *tmpRes = res->ColomnData(i);
-                    result += (tmpRes ? std::move(string(tmpRes)): "None");
+                    result += (tmpRes ? std::move(string(tmpRes)): "NONE");
 
                 }
             }
@@ -222,6 +302,12 @@ private:
             boost::unique_lock<boost::shared_mutex> lock(bl_);
             placeFree_ = result;
         }
+    }
+
+
+    static const string getTmpDbPath(){
+        static const string tmpDbPath("temp_db.sqlite3");
+        return tmpDbPath;
     }
 
 private:

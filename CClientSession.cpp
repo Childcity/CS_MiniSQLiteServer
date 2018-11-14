@@ -139,9 +139,21 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 
         }else if(0 == inMsg.find(u8"get_db_backup")){
             //TODO: sending bak
-            //TODO: delete bak
             businessLogic_->resetBackUpProgress();
             do_write("Backup was send!");
+
+            // start executing query from tmp db in background
+            auto self = shared_from_this();
+            io_context_.post([self, this](){ //async call
+                businessLogic_->syncDbWithTmp(db, [=](size_t ms){
+                    // Construct a timer without setting an expiry time.
+                    deadline_timer timer(io_context_);
+                    // Set an expiry time relative to now.
+                    timer.expires_from_now(boost::posix_time::millisec(ms));
+                    // Wait for the timer to expire.
+                    timer.wait();
+                });
+            });
 
         }else if(0 == inMsg.find(u8"login ")){
             on_login(inMsg);
@@ -323,18 +335,20 @@ void CClientSession::do_ask_db(string &query)
             }
         }else{
 
+            int effectedData = 0;
+
             if(-1 != businessLogic_->getBackUpProgress()){
-                //TODO write to tmp db
-                VLOG(1) <<"Insert while backuping! Backup db will be restarted!!";
+                effectedData = businessLogic_->SaveQueryToTmpDb(query);
+                VLOG(1) <<"Insert to tmp while backuping. Effected data: " <<effectedData;
+            }else{
+                effectedData =  db->Execute(query.c_str());
             }
 
-            int effectedData =  db->Execute(query.c_str());
 
             if (effectedData < 0){
                 answer = std::string("ERROR: effected data < 0! : " + db->GetLastError());
                 LOG(WARNING) << answer;
-            }
-            else{
+            }else{
                 //answer = "OK: count of effected data(" + std::to_string(effectedData) +")";
                 answer = "NONE";
             }
