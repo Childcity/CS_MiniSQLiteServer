@@ -92,8 +92,8 @@ int main(int argc, char *argv[])
 void TestSqlite3Settings(CConfig *cfg){
 
     VLOG(1) <<"DEBUG: sqlite version: " <<sqlite3_version;
-	VLOG(1) <<"DEBUG: using db: " <<cfg->keyBindings.dbPath;
-    VLOG(1) <<"DEBUG: using db backup file: " <<cfg->keyBindings.bakDbPath;
+    LOG(INFO) <<"Using db: " <<cfg->keyBindings.dbPath;
+    LOG(INFO) <<"Using db backup file: " <<cfg->keyBindings.bakDbPath;
 
 	std::ofstream testFile(cfg->keyBindings.bakDbPath, std::ios::in |std::ios::out | std::ios::app | std::ios::binary);
 	LOG_IF(FATAL, ! testFile.is_open()) <<"Can't open backup file! (Check permission)";
@@ -107,7 +107,12 @@ void TestSqlite3Settings(CConfig *cfg){
 	// check tmp db or create new
 	CBusinessLogic::CreateOrUseOldTmpDb();
 
-	VLOG(1) <<"DEBUG: connection to db checked - everything is OK";
+    LOG(INFO) <<"Connection to db and tmp db: Ok";
+
+	VLOG(1) <<"DEBUG: synchronization main db with tmp db...";
+	CBusinessLogic::SyncDbWithTmp(cfg->keyBindings.dbPath, [=](size_t ms) { (void)ms; /*here we shouldn't sleep, just skip it*/ });
+
+    LOG(INFO) <<"Synchronization: OK";
 }
 
 void SafeExit()

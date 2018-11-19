@@ -118,15 +118,21 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
         inMsg.resize(cleanMsgSize);
 
 
-        VLOG(1) << "DEBUG: received msg '" << inMsg <<"'\n"	<< " DEBUG: received bytes from user '" <<username() <<"': " << bytes;
+        VLOG(1) << "DEBUG: received msg '" << inMsg << "\nDEBUG: received bytes from user '" <<username() <<"' bytes: " << bytes
+                << " delay: " <<(boost::posix_time::microsec_clock::local_time() - last_ping_).total_milliseconds();
 
         if(0 == inMsg.find(u8"UPDATE Config SET PlaceFree")){
             businessLogic_->updatePlaceFree(db, inMsg, "select PlaceFree from Config;");
             do_write("NONE");
 
-        }else if(0 == inMsg.find(u8"get_place_free")){
-            businessLogic_->checkPlaceFree(db, "select PlaceFree from Config;");
-            do_write(businessLogic_->getCachedPlaceFree());
+        }else if(0 == inMsg.find(u8"get_place_free")) {
+            try {
+                businessLogic_->checkPlaceFree(db, "select PlaceFree from Config;");
+                do_write(businessLogic_->getCachedPlaceFree());
+            } catch (BusinessLogicError &e){
+                // if an error occur, send last PlaceFree. If last PlaceFree == -1, send 0
+                do_write(businessLogic_->getCachedPlaceFree() == "-1" ? "0" : businessLogic_->getCachedPlaceFree());
+            }
 
         }else if(0 == inMsg.find(u8"backup_db")){
             auto self = shared_from_this();
@@ -156,25 +162,40 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
             }
 
             //TODO: sending  bak
-            do_write("Backup was send!");
-            // after this server 'think' that backup doesn't exist!
 
-            // start executing query from tmp db in background
+            if(! backupReader_.open(bakDbPath)){
+                string errMsg("can't open backup file [" + bakDbPath + "]");
+                LOG(WARNING) << errMsg;
+                do_write("ERROR: " + errMsg);
+                return;
+            }
+
+            if(backupReader_.isEOF()){ //file is empty
+                do_write("");
+                return;
+            }
+
             auto self = shared_from_this();
+            sock_.async_write_some(buffer(backupReader_.nextChunk(), backupReader_.chunkSize()),
+                                   [this, self](const error_code &err, size_t bytes)
+                                   {
+                                       const char *nextChunk = backupReader_.nextChunk();
+                                       if( ! started() || ! nextChunk )
+                                           return;
+
+                                       sock_.async_write_some(buffer(backupReader_.nextChunk(), backupReader_.chunkSize()),
+                                                              [this, self](const error_code &err, size_t bytes)
+                                                              {
+
+                                                              }
+                                   }
+            );
+
             io_context_.post([self, this](){ //async call
-                try {
-                    businessLogic_->syncDbWithTmp(db, [=](size_t ms) {
-                        // Construct a timer without setting an expiry time.
-                        deadline_timer timer(io_context_);
-                        // Set an expiry time relative to now.
-                        timer.expires_from_now(boost::posix_time::millisec(ms));
-                        // Wait for the timer to expire.
-                        timer.wait();
-                    });
-                }catch (BusinessLogicError &e){
-                    LOG(WARNING) <<"Sync Error [" <<e.what() <<"]";
-                }
+
             });
+
+            // after this server 'think' that backup doesn't exist!
 
         }else if(0 == inMsg.find(u8"login ")){
             on_login(inMsg);
@@ -201,11 +222,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 
     }catch (BusinessLogicError &e){
         LOG(WARNING) <<"BusinessLogic error [" <<e.what() <<"]";
-
-        //if error occur, send last PlaceFree. If last PlaceFree == -1, send 0
-        do_write(businessLogic_->getCachedPlaceFree() == "-1" ? "0" : businessLogic_->getCachedPlaceFree());
-
-        //do_write(e.what());
+        do_write(e.what());
     }
 
 }
@@ -256,9 +273,10 @@ void CClientSession::on_check_ping()
 {
     boost::recursive_mutex::scoped_lock lk(cs_);
     boost::posix_time::ptime now = boost::posix_time::microsec_clock::local_time();
+    time_duration::tick_type delay = (now - last_ping_).total_milliseconds();
 
-    if( (now - last_ping_).total_milliseconds() >= long(maxTimeout_ - 1) ){
-        VLOG(1) << "DEBUG: stopping: " << username_ << " - no ping in time" << std::endl;
+    if( delay >= time_duration::tick_type(maxTimeout_ - 1) ){
+        VLOG(1) << "DEBUG: stopping: " << username_ << " - no ping in time " <<delay;
         stop();
     }
 
@@ -443,7 +461,24 @@ void CClientSession::do_db_backup() {
         msg = "ERROR: db was not backuped: " + db->GetLastError();
         LOG(WARNING) << msg;
     }else if(100 == backUpStatus){
-        //TODO: start acync insert cached data!!!
+
+        // start executing query from tmp db in background
+        auto self = shared_from_this();
+        io_context_.post([self, this](){ //async call
+            try {
+                businessLogic_->SyncDbWithTmp(dbPath, [=](size_t ms) {
+                    // Construct a timer without setting an expiry time.
+                    deadline_timer timer(io_context_);
+                    // Set an expiry time relative to now.
+                    timer.expires_from_now(boost::posix_time::millisec(ms));
+                    // Wait for the timer to expire.
+                    timer.wait();
+                });
+            }catch (BusinessLogicError &e){
+                LOG(WARNING) <<"Sync Error [" <<e.what() <<"]";
+            }
+        });
+
         msg = "backup db complete [100%]";
         LOG(INFO) << "DEBUG: " <<msg;
     }else if(backUpStatus > 0 && backUpStatus < 100){

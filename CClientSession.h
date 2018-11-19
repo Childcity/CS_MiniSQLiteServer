@@ -15,6 +15,7 @@
 
 #include <string>
 #include <iostream>
+#include <fstream>
 #include <algorithm>
 #include <utility>
 
@@ -29,6 +30,22 @@ void update_clients_changed();
 class CClientSession : public boost::enable_shared_from_this<CClientSession>
 							, boost::noncopyable{
 private:
+    class CBinaryFileReader{
+        char buffer[4096] {0};
+        const size_t size = countof(buffer);
+        std::ifstream fileStream;
+        string path_;
+    public:
+        CBinaryFileReader() = default;
+        CBinaryFileReader(const CBinaryFileReader &) = delete;
+        ~CBinaryFileReader(){ close(); }
+        bool open(const string &path){ close(); fileStream.open(bakDbPath, std::ios::in | std::ios::binary); }
+        void close(){ if(fileStream.is_open()) fileStream.close(); }
+        const char *nextChunk(){ if(fileStream.eof()) return nullptr; fileStream.read(buffer, size);  return buffer; }
+        size_t chunkSize() const { fileStream.gcount(); }
+        bool isEOF() const { return fileStream.eof(); }
+    };
+
 	typedef boost::system::error_code error_code;
 	using businessLogic_ptr = boost::shared_ptr<CBusinessLogic>;
 
@@ -126,6 +143,7 @@ private:
 	const char separator = '|';
 
     businessLogic_ptr businessLogic_;
+    CBinaryFileReader backupReader_;
 };
 
 #endif //CS_MINISQLITESERVER_CCLIENTSESSION_H
