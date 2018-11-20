@@ -24,6 +24,8 @@ bool CBinaryFileReader::open(const std::string &path) {
 }
 
 void CBinaryFileReader::close() {
+    buffer_.reset();
+
     if(fileStream_.is_open())
         fileStream_.close();
 }
