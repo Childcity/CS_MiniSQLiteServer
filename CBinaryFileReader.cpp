@@ -14,7 +14,7 @@ bool CBinaryFileReader::open(const std::string &path) {
 
     try{
         buffer_.reset({ new char[CHUNK_SIZE] });
-    } catch(...){
+    } catch( ... ){
         return false;
     }
 
