@@ -355,7 +355,6 @@ bool CSQLiteDB::BackupDb(const char *zFilename, const std::function<void(const i
                 }
 
                 if( rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED ){
-                    //TODO: maybe this sleep is not needed, because all insert/update will go in temp file, but select can be executed from another connection
                     sqlite3_sleep(100);
                 }
             } while( rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED );
