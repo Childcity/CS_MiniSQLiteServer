@@ -140,7 +140,7 @@ public:
 
     // throws BuisnessLogicErro
     // This method select saved querys, while backup was active, and execute theirs in main db
-    static void SyncDbWithTmp(const string mainDbPath, const std::function<void(const size_t)> &waitFunc){
+    static void SyncDbWithTmp(const string &mainDbPath, const std::function<void(const size_t)> &waitFunc){
 
         static std::recursive_mutex sync_;
 
