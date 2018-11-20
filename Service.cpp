@@ -3,23 +3,48 @@
 
 static SERVICE_STATUS ServiceStatus;
 static SERVICE_STATUS_HANDLE hStatus;
-static LPWSTR serviceName;
+static LPSTR serviceName;
+static int service_argc = 0;
+static char **service_argv = NULL;
 
-int service_register(const LPWSTR serviceName_)
+int service_register(DWORD argc, LPTSTR argv[], const LPTSTR serviceName_)
 {
 	serviceName = serviceName_;
-    int ret;
-    SERVICE_TABLE_ENTRYW ServiceTable[] = {
-        { serviceName, (LPSERVICE_MAIN_FUNCTIONW)service_main},
+    SERVICE_TABLE_ENTRY ServiceTable[] = {
+        { serviceName, (LPSERVICE_MAIN_FUNCTION)service_main},
         {NULL, NULL}
     };
 
-    ret = StartServiceCtrlDispatcherW(ServiceTable);
+	/*
+	* Save argc & argv as service_main is called with different
+	* arguments, which are passed from "start" command, not
+	* from the program command line.
+	* We don't need this behaviour.
+	*
+	* Note that if StartServiceCtrlDispatcher() succeedes
+	* it does not return until the service is stopped,
+	* so we should copy all arguments first and then
+	* handle the failure.
+	*/
+	if ((! service_argc) && (! service_argv)) {
+		service_argc = argc;
+		service_argv = cpy_cstr_list(argc, argv);
+	}
+
+    int ret = StartServiceCtrlDispatcher(ServiceTable);
+
+	if (service_argc && service_argv) {
+		for (size_t i = 0; i < argc; i++) {
+			delete[] service_argv[i];
+		}
+		delete service_argv;
+	}
+
 	VLOG(1) << "DEBUG: StartServiceCtrlDispatcher returned with: " << ret;
     return ret;
 }
 
-void service_main()
+void service_main(DWORD argc, LPTSTR argv[])
 {
     ServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS; 
     ServiceStatus.dwCurrentState = SERVICE_RUNNING;
@@ -29,7 +54,7 @@ void service_main()
     ServiceStatus.dwCheckPoint = 1;
     ServiceStatus.dwWaitHint = 0;
 
-    hStatus = RegisterServiceCtrlHandlerW(
+    hStatus = RegisterServiceCtrlHandler(
 		serviceName,
         (LPHANDLER_FUNCTION)service_controlhandler);
 
@@ -42,9 +67,9 @@ void service_main()
 
     SetServiceStatus(hStatus, &ServiceStatus);
 
-    // Calling main
+    // Calling main with saved argc & argv
 	VLOG(1) << "DEBUG: starting server from service.";
-    ServiceStatus.dwWin32ExitCode = wmain();
+    ServiceStatus.dwWin32ExitCode = main(service_argc, service_argv);
     ServiceStatus.dwCurrentState  = SERVICE_STOPPED;
     SetServiceStatus(hStatus, &ServiceStatus);
     return;

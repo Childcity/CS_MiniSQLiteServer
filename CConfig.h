@@ -2,7 +2,13 @@
 #ifndef CS_MINISQLITESERVER_CCONFIG_H
 #define CS_MINISQLITESERVER_CCONFIG_H
 
+#include <boost/asio.hpp>
 #include <string>
+#include "main.h"
+
+#ifdef WIN32
+#include <Windows.h>
+#endif // WIN32
 
 using string = std::string;
 
@@ -14,6 +20,7 @@ private:
         explicit KeyBindings(string exePath);
 
 		string dbPath;
+        string bakDbPath;
 		long blockOrClusterSize;
 		long waitTimeMillisec;
 		long countOfEttempts;

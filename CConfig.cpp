@@ -14,7 +14,8 @@ CConfig::KeyBindings::KeyBindings(const string exePath)
 	exeName_ = exePath.substr(found + 1);
 	exeFolderPath_ = exePath.substr(0, (exePath.size() - exeName_.size()));
 
-	dbPath = exeFolderPath_ + "defaultEmptyDb.sqlite3";
+    dbPath = exeFolderPath_ + "defaultEmptyDb.sqlite3";
+	bakDbPath = exeFolderPath_ + "backup.sqlite3";
 	blockOrClusterSize = 4096;
 	waitTimeMillisec = 50;
 	countOfEttempts = 200;
@@ -106,20 +107,23 @@ void CConfig::initGlog()
 	FLAGS_v = static_cast<google::int32>(keyBindings.verbousLog);
 	FLAGS_minloglevel = static_cast<google::int32>(keyBindings.minLogLevel);
 
-	int ret = mkdir(keyBindings.logDir.c_str(),  S_IRWXU | S_IRWXG |  S_IRWXO);
-	if((0 != ret) && (EEXIST != errno)){
-		//log directory not exist or permission denied or other error
-		LOG(FATAL) <<"Error: can't create or use log dir '" <<keyBindings.logDir <<"': "<<strerror(errno);
-	}
 
-	ret = mkdir(newFolder.c_str(),  S_IRWXU | S_IRWXG |  S_IRWXO);
-	if((0 != ret) && (EEXIST != errno)){
-		//log directory not exist or permission denied or other error
-		LOG(FATAL) <<"Error: can't create or use log dir '" <<newFolder <<"': "<<strerror(errno);
-	}
-	/*CreateDirectoryW(keyBindings.logDir.c_str(), NULL);
-    CreateDirectoryW(newFolder.c_str(), NULL);*/
+	#ifdef WIN32
+	CreateDirectoryW(ConverterUTF8_UTF16<std::string, std::wstring>(keyBindings.logDir).c_str(), NULL);
+	CreateDirectoryW(ConverterUTF8_UTF16<std::string, std::wstring>(newFolder).c_str(), NULL);
+	#else
+		int ret = mkdir(keyBindings.logDir.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
+		if ((0 != ret) && (EEXIST != errno)) {
+			//log directory not exist or permission denied or other error
+			LOG(FATAL) << "Error: can't create or use log dir '" << keyBindings.logDir << "': " << strerror(errno);
+		}
 
+		ret = mkdir(newFolder.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
+		if ((0 != ret) && (EEXIST != errno)) {
+			//log directory not exist or permission denied or other error
+			LOG(FATAL) << "Error: can't create or use log dir '" << newFolder << "': " << strerror(errno);
+		}
+	#endif // WIN32
 
 	google::InitGoogleLogging(defaultKeyBindings.exeName_.c_str());
 }
@@ -140,6 +144,7 @@ void CConfig::updateKeyBindings() {
 		keyBindings.timeoutToDropConnection = settings.GetInteger("ServerSettings", "TimeoutToDropConnection", -1L);
 		//DB settings
 		keyBindings.dbPath = settings.Get("DatabaseSettings", "PathToDatabaseFile", "_a");
+		keyBindings.bakDbPath = settings.Get("DatabaseSettings", "PathToDatabaseBackupFile", "_a");
 		keyBindings.blockOrClusterSize = settings.GetInteger("DatabaseSettings", "BlockOrClusterSize", -1L);
 		keyBindings.waitTimeMillisec = settings.GetInteger("DatabaseSettings", "WaitTimeMillisec", -1L);
 		keyBindings.countOfEttempts = settings.GetInteger("DatabaseSettings", "CountOfAttempts", -1L);
@@ -149,6 +154,7 @@ void CConfig::updateKeyBindings() {
 		keyBindings.stopLoggingIfFullDisk = settings.GetBoolean("LogSettings", "StopLoggingIfFullDisk", false);
 		keyBindings.verbousLog = settings.GetInteger("LogSettings", "DeepLogging", 0L);
 		keyBindings.minLogLevel = settings.GetInteger("LogSettings", "MinLogLevel", 0L);
+		keyBindings.logDir = settings.Get("LogSettings", "LogDir", "_a");
 		//Service settings (only for windows)
 		keyBindings.serviceName = settings.Get("ServiceSettings", "ServiceName", "_a");
 
@@ -157,6 +163,7 @@ void CConfig::updateKeyBindings() {
 			|| keyBindings.waitTimeMillisec <= 0L
 			|| keyBindings.timeoutToDropConnection <= 0L
 			|| keyBindings.dbPath == "_a" || keyBindings.dbPath.empty()
+			|| keyBindings.bakDbPath == "_a" || keyBindings.bakDbPath.empty()
 			|| keyBindings.logDir == "_a" || keyBindings.logDir.empty()
 			|| keyBindings.serviceName == "_a" || keyBindings.serviceName.empty()) {
 			//!!! This log massage go to stderr ONLY, because GLOG is not initialized yet !
@@ -195,6 +202,7 @@ void CConfig::saveKeyBindings() {
 	settings["ServerSettings"]["TimeoutToDropConnection"]("5 min") = defaultKeyBindings.timeoutToDropConnection;
 	//DB settings
 	settings["DatabaseSettings"]["PathToDatabaseFile"] = defaultKeyBindings.dbPath;
+	settings["DatabaseSettings"]["PathToDatabaseBackupFile"] = defaultKeyBindings.bakDbPath;
 	settings["DatabaseSettings"]["BlockOrClusterSize"]("Set, according to your file system block/cluster size. This make sqlite db more faster") = defaultKeyBindings.blockOrClusterSize;
 	settings["DatabaseSettings"]["WaitTimeMillisec"]("Time, that thread waiting before next attempt to begin 'write transaction'") = defaultKeyBindings.waitTimeMillisec;
 	settings["DatabaseSettings"]["CountOfAttempts"]("Number of attempts to begin 'write transaction'") = defaultKeyBindings.countOfEttempts;
