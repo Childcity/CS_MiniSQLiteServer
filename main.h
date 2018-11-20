@@ -9,6 +9,7 @@
 #include "CConfig.h"
 
 extern std::string dbPath;
+extern std::string bakDbPath;
 extern size_t sqlWaitTime;
 extern size_t sqlCountOfAttempts;
 extern long blockOrClusterSize;

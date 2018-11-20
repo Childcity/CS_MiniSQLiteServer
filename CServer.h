@@ -3,10 +3,12 @@
 #define CS_MINISQLITESERVER_CSERVER_H
 
 #include "CClientSession.h"
+#include "CBusinessLogic.h"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/thread.hpp>
+#include <boost/make_shared.hpp>
 
 using namespace boost::asio;
 using boost::asio::ip::tcp;
@@ -18,6 +20,7 @@ public:
 		, io_context_(io_context)
 		, thread_num_(thread_num)
 		, maxTimeout_(maxTimeout)
+        , businessLogic_(boost::make_shared<CBusinessLogic>())
 	{ Start(); }
 
 	explicit CServer(io_context& io_context, const size_t maxTimeout, const std::string &ipAddress, unsigned short port, unsigned short thread_num)
@@ -25,8 +28,9 @@ public:
 		, io_context_(io_context)
 		, thread_num_(thread_num)
 		, maxTimeout_(maxTimeout)
+        , businessLogic_(boost::make_shared<CBusinessLogic>())
 	{ Start(); }
-	
+
 	CServer(CServer const&) = delete;
 	CServer operator=(CServer const&) = delete;
 
@@ -37,11 +41,14 @@ private:
 
 	void start_listen();
 
+private:
 	io_context &io_context_;
 	tcp::acceptor acceptor_;
 	boost::thread_group threads;
 	short thread_num_;
 	const size_t maxTimeout_;
+
+    boost::shared_ptr<CBusinessLogic> businessLogic_;
 };
 
 #endif //CS_MINISQLITESERVER_CSERVER_H

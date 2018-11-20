@@ -5,6 +5,8 @@
 #include "main.h"
 #include "CSQLiteDB.h"
 #include "glog/logging.h"
+#include "CBusinessLogic.h"
+#include "CBinaryFileReader.h"
 
 #include <boost/bind.hpp>
 #include <boost/asio.hpp>
@@ -13,9 +15,8 @@
 #include <boost/enable_shared_from_this.hpp>
 
 #include <string>
-#include <iostream>
 #include <algorithm>
-
+#include <utility>
 
 using namespace boost::asio;
 using namespace boost::posix_time;
@@ -29,18 +30,9 @@ class CClientSession : public boost::enable_shared_from_this<CClientSession>
 							, boost::noncopyable{
 private:
 	typedef boost::system::error_code error_code;
+	using businessLogic_ptr = boost::shared_ptr<CBusinessLogic>;
 
-    explicit CClientSession(io_context &io_context, const size_t maxTimeout)
-		: sock_(io_context)
-		, started_(false)
-		, timer_(io_context)
-        , maxTimeout_(maxTimeout)
-		, clients_changed_(false)
-		, username_("user")
-		, io_context_(io_context)
-		, write_buffer_({ new char[MAX_WRITE_BUFFER] })
-		, read_buffer_({ new char[MAX_READ_BUFFER] })
-	{}
+    explicit CClientSession(io_context &io_context, const size_t maxTimeout, businessLogic_ptr businessLogic);
 
 public:
 
@@ -50,7 +42,7 @@ public:
 	void start();
 
 	// class factory. scoped_array = Return ptr to this class
-	static ptr new_(io_context& io_context, size_t maxTimeout);
+	static ptr new_(io_context& io_context, size_t maxTimeout, businessLogic_ptr businessLogic);
 
 	// stop working with current client and remove it from clients
 	void stop();
@@ -83,7 +75,9 @@ private:
 
 	void on_write(const error_code &err, size_t bytes);
 
-		void do_get_fibo(const size_t &n) ;
+    void on_backup_chunk_write(const CClientSession::error_code &err, size_t bytes);
+
+		void do_get_fibo(const size_t &n);
 
 		void on_fibo(const string &msg);
 
@@ -95,10 +89,18 @@ private:
 
 	void do_write(const string &msg);
 
+	void do_backup_chunk_write();
+
+	void do_db_backup();
+
+	void do_ask_db_backup_progress();
+
+	void do_get_db_backup();
+
 private:
 
 	mutable boost::recursive_mutex cs_;
-	enum{ MAX_WRITE_BUFFER = 20971520, MAX_READ_BUFFER = 102400 };
+	enum{ MAX_WRITE_BUFFER = 20971520, MAX_READ_BUFFER = 1024 };
 	const size_t maxTimeout_;
     //const char endOfMsg[0] = {};
 	const size_t sizeEndOfMsg = 1;
@@ -117,6 +119,9 @@ private:
 	mutable  boost::recursive_mutex db_;
 	CSQLiteDB::ptr db;
 	const char separator = '|';
+
+    businessLogic_ptr businessLogic_;
+    CBinaryFileReader backupReader_;
 };
 
 #endif //CS_MINISQLITESERVER_CCLIENTSESSION_H
