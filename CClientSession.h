@@ -6,6 +6,7 @@
 #include "CSQLiteDB.h"
 #include "glog/logging.h"
 #include "CBusinessLogic.h"
+#include "CBinaryFileReader.h"
 
 #include <boost/bind.hpp>
 #include <boost/asio.hpp>
@@ -14,8 +15,6 @@
 #include <boost/enable_shared_from_this.hpp>
 
 #include <string>
-#include <iostream>
-#include <fstream>
 #include <algorithm>
 #include <utility>
 
@@ -30,37 +29,10 @@ void update_clients_changed();
 class CClientSession : public boost::enable_shared_from_this<CClientSession>
 							, boost::noncopyable{
 private:
-    class CBinaryFileReader{
-        char buffer[4096] {0};
-        const size_t size = countof(buffer);
-        std::ifstream fileStream;
-        string path_;
-    public:
-        CBinaryFileReader() = default;
-        CBinaryFileReader(const CBinaryFileReader &) = delete;
-        ~CBinaryFileReader(){ close(); }
-        bool open(const string &path){ close(); fileStream.open(bakDbPath, std::ios::in | std::ios::binary); }
-        void close(){ if(fileStream.is_open()) fileStream.close(); }
-        const char *nextChunk(){ if(fileStream.eof()) return nullptr; fileStream.read(buffer, size);  return buffer; }
-        size_t chunkSize() const { fileStream.gcount(); }
-        bool isEOF() const { return fileStream.eof(); }
-    };
-
 	typedef boost::system::error_code error_code;
 	using businessLogic_ptr = boost::shared_ptr<CBusinessLogic>;
 
-    explicit CClientSession(io_context &io_context, const size_t maxTimeout, businessLogic_ptr businessLogic)
-		: sock_(io_context)
-		, started_(false)
-		, timer_(io_context)
-        , maxTimeout_(maxTimeout)
-		, clients_changed_(false)
-		, username_("user")
-		, io_context_(io_context)
-		, write_buffer_({ new char[MAX_WRITE_BUFFER] })
-		, read_buffer_({ new char[MAX_READ_BUFFER] })
-        , businessLogic_(std::move(businessLogic))
-	{}
+    explicit CClientSession(io_context &io_context, const size_t maxTimeout, businessLogic_ptr businessLogic);
 
 public:
 
@@ -103,7 +75,9 @@ private:
 
 	void on_write(const error_code &err, size_t bytes);
 
-		void do_get_fibo(const size_t &n) ;
+    void on_backup_chunk_write(const CClientSession::error_code &err, size_t bytes);
+
+		void do_get_fibo(const size_t &n);
 
 		void on_fibo(const string &msg);
 
@@ -115,14 +89,18 @@ private:
 
 	void do_write(const string &msg);
 
+	void do_backup_chunk_write();
+
 	void do_db_backup();
 
 	void do_ask_db_backup_progress();
 
+	void do_get_db_backup();
+
 private:
 
 	mutable boost::recursive_mutex cs_;
-	enum{ MAX_WRITE_BUFFER = 20971520, MAX_READ_BUFFER = 102400 };
+	enum{ MAX_WRITE_BUFFER = 20971520, MAX_READ_BUFFER = 1024 };
 	const size_t maxTimeout_;
     //const char endOfMsg[0] = {};
 	const size_t sizeEndOfMsg = 1;

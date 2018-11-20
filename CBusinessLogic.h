@@ -149,12 +149,10 @@ public:
         if(! lock1){
             std::unique_lock<std::recursive_mutex> lock2(sync_, std::try_to_lock);
             if(! lock2){
-                VLOG(1) <<"ERROROROROROROROROROR";
                 return;
             }
         }
 
-        VLOG(1) <<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
         const auto tmpDb = CSQLiteDB::new_(getTmpDbPath());
         const auto mainDb = CSQLiteDB::new_(mainDbPath);
 
@@ -192,7 +190,7 @@ public:
                 break;
             }
 
-            // 3 column will be returned
+            // 3 columns will be returned
             const string rowid = res->ColomnData(0);
             const string query = res->ColomnData(1);
 

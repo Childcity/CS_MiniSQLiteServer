@@ -16,13 +16,13 @@ set(SOURCES
         include/sqlite3/sqlite3.c
         include/INIReaderWriter/ini.c
         include/INIReaderWriter/INIReader.cpp
-        include/INIReaderWriter/INIWriter.hpp CBusinessLogic.cpp CBusinessLogic.h)
+        include/INIReaderWriter/INIWriter.hpp CBusinessLogic.cpp CBusinessLogic.h CBinaryFileReader.cpp CBinaryFileReader.h)
 
 set(HEADERS
         main.h CConfig.h CServer.h CClientSession.h CSQLiteDB.h
         include/sqlite3/sqlite3.h
         include/INIReaderWriter/ini.h
-        include/INIReaderWriter/INIReader.h CBusinessLogic.cpp CBusinessLogic.h)
+        include/INIReaderWriter/INIReader.h CBusinessLogic.cpp CBusinessLogic.h CBinaryFileReader.cpp CBinaryFileReader.h)
 
 add_executable(${PROJECT_NAME} ${HEADERS} ${SOURCES})
 target_link_libraries (${PROJECT_NAME} ${USED_LIBS} ${CMAKE_DL_LIBS})

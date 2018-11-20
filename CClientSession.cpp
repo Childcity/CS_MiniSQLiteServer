@@ -6,6 +6,20 @@ typedef boost::shared_ptr<CClientSession> client_ptr;
 typedef std::vector<client_ptr> cli_ptr_vector;
 cli_ptr_vector clients;
 
+CClientSession::CClientSession(io_context &io_context, const size_t maxTimeout,
+                               CClientSession::businessLogic_ptr businessLogic)
+        : sock_(io_context)
+        , started_(false)
+        , timer_(io_context)
+        , maxTimeout_(maxTimeout)
+        , clients_changed_(false)
+        , username_("user")
+        , io_context_(io_context)
+        , write_buffer_({ new char[MAX_WRITE_BUFFER] })
+        , read_buffer_({ new char[MAX_READ_BUFFER] })
+        , businessLogic_(std::move(businessLogic))
+{}
+
 void CClientSession::start()
 {
     started_ = true;
@@ -119,7 +133,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 
 
         VLOG(1) << "DEBUG: received msg '" << inMsg << "\nDEBUG: received bytes from user '" <<username() <<"' bytes: " << bytes
-                << " delay: " <<(boost::posix_time::microsec_clock::local_time() - last_ping_).total_milliseconds();
+                << " delay: " <<(boost::posix_time::microsec_clock::local_time() - last_ping_).total_milliseconds() <<"ms";
 
         if(0 == inMsg.find(u8"UPDATE Config SET PlaceFree")){
             businessLogic_->updatePlaceFree(db, inMsg, "select PlaceFree from Config;");
@@ -144,58 +158,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
             do_ask_db_backup_progress();
 
         }else if(0 == inMsg.find(u8"get_db_backup")){
-
-            bool isBackUpExist = false;
-            {// next thread will wait here, until current thread reseting backUpStatus if it 100%
-                boost::recursive_mutex::scoped_lock lk(clients_cs);
-                isBackUpExist = businessLogic_->getBackUpProgress() == 100; // backup exists if getBackUpProgress == 100%. Backup can be sent to a client only one time
-
-                if(isBackUpExist){
-                    businessLogic_->resetBackUpProgress();
-                }
-            }
-
-            if(! isBackUpExist){
-                LOG(INFO) <<"Client sent 'get_db_backup', but backup doesn't exist or have been sent to another client";
-                do_write("NONE: Backup doesn't exist, you can send 'backup_db' to create new and 'get_db_backup_progress' to check backup progress!");
-                return;
-            }
-
-            //TODO: sending  bak
-
-            if(! backupReader_.open(bakDbPath)){
-                string errMsg("can't open backup file [" + bakDbPath + "]");
-                LOG(WARNING) << errMsg;
-                do_write("ERROR: " + errMsg);
-                return;
-            }
-
-            if(backupReader_.isEOF()){ //file is empty
-                do_write("");
-                return;
-            }
-
-            auto self = shared_from_this();
-            sock_.async_write_some(buffer(backupReader_.nextChunk(), backupReader_.chunkSize()),
-                                   [this, self](const error_code &err, size_t bytes)
-                                   {
-                                       const char *nextChunk = backupReader_.nextChunk();
-                                       if( ! started() || ! nextChunk )
-                                           return;
-
-                                       sock_.async_write_some(buffer(backupReader_.nextChunk(), backupReader_.chunkSize()),
-                                                              [this, self](const error_code &err, size_t bytes)
-                                                              {
-
-                                                              }
-                                   }
-            );
-
-            io_context_.post([self, this](){ //async call
-
-            });
-
-            // after this server 'think' that backup doesn't exist!
+            do_get_db_backup();
 
         }else if(0 == inMsg.find(u8"login ")){
             on_login(inMsg);
@@ -223,6 +186,8 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
     }catch (BusinessLogicError &e){
         LOG(WARNING) <<"BusinessLogic error [" <<e.what() <<"]";
         do_write(e.what());
+    }catch (...){
+        stop();
     }
 
 }
@@ -439,7 +404,7 @@ void CClientSession::do_write(const string &msg)
 
     std::copy(msg.begin(), msg.end(), write_buffer_.get());
 
-    sock_.async_write_some(buffer(write_buffer_.get(), msg.size()),
+    async_write(sock_, buffer(write_buffer_.get(), msg.size()),
                            bind(&CClientSession::on_write, shared_from_this(), _1, _2));
 }
 
@@ -501,6 +466,68 @@ void CClientSession::do_ask_db_backup_progress() {
 
     VLOG(1) << "DEBUG: " <<msg;
     do_write(msg);
+}
+
+void CClientSession::on_backup_chunk_write(const CClientSession::error_code &err, size_t bytes) {
+    //VLOG(1) <<"sanded bytes: " <<bytes << " delay: " <<(boost::posix_time::microsec_clock::local_time() - last_ping_).total_milliseconds();
+    if( err ){
+        LOG(WARNING) <<"ERROR: can't send file to client: " <<err;
+        do_write("ERROR: " + err.message());
+        return;
+    }
+
+    post_check_ping();
+
+    do_backup_chunk_write();
+}
+
+void CClientSession::do_backup_chunk_write() {
+    if( ! started() )
+        return;
+
+    if( ! backupReader_.nextChunk() ){
+        backupReader_.close();
+        do_read();
+        return;
+    }
+
+    async_write(sock_, buffer(backupReader_.currentChunk(), backupReader_.chunkSize()),
+                           bind(&CClientSession::on_backup_chunk_write, shared_from_this(), _1, _2));
+}
+
+void CClientSession::do_get_db_backup() {
+    bool isBackUpExist = false;
+
+    {// next thread will wait here, until current thread reseting backUpStatus if it 100%
+        boost::recursive_mutex::scoped_lock lk(clients_cs);
+        isBackUpExist = businessLogic_->getBackUpProgress() == 100; // backup exists if getBackUpProgress == 100%. Backup can be sent to a client only one time
+
+        if(isBackUpExist){
+            businessLogic_->resetBackUpProgress();
+        }
+    }
+
+    if(! isBackUpExist){
+        LOG(INFO) <<"Client sent 'get_db_backup', but backup doesn't exist or have been sent to another client";
+        do_write("NONE : Backup doesn't exist, you can send 'backup_db' to create new and 'get_db_backup_progress' to check backup progress!");
+        return;
+    }
+
+    if(! backupReader_.open(bakDbPath)){
+        string errMsg("can't open backup file [" + bakDbPath + "]");
+        LOG(WARNING) << errMsg;
+        do_write("ERROR: " + errMsg);
+        return;
+    }
+
+    if(backupReader_.isEOF()){ //file is empty. Send empty string
+        do_write("");
+        return;
+    }
+
+    do_backup_chunk_write();
+
+    // after this server 'think' that backup doesn't exist!
 }
 
 void update_clients_changed()
