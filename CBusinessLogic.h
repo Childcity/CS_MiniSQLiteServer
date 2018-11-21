@@ -10,8 +10,9 @@
 #include "glog/logging.h"
 
 #include <string>
-#include <boost/shared_ptr.hpp>
+#include <fstream>
 #include <utility>
+#include <boost/shared_ptr.hpp>
 #include <boost/thread/pthread/recursive_mutex.hpp>
 #include <mutex>
 
@@ -56,7 +57,7 @@ public:
         }
     }
 
-    string getCachedPlaceFree() const{
+    string getCachedPlaceFree() const {
         //NOT exclusive access to data! Allows only read, not write!
         boost::shared_lock< boost::shared_mutex > lock(bl_);
         return placeFree_;
@@ -128,9 +129,13 @@ public:
         return 100;
     }
 
-    int getBackUpProgress() const{
+    int getBackUpProgress() const {
         boost::shared_lock< boost::shared_mutex > lock(bl_); //NOT exclusive access to data! Allows only read, not write!
         return backupProgress_;
+    }
+
+    bool isBackupExist(const string &backupPath) const {
+        return (getBackUpProgress() == 100) && std::ifstream{backupPath} ;
     }
 
     void resetBackUpProgress(){
@@ -272,8 +277,8 @@ public:
             throw BusinessLogicError(errMsg);
         }
 
-        std::replace(query.begin(), query.end(), '\'', '\'\''); //replace ' to ''
-        return tmpDb->Execute(string("INSERT INTO `tmp_querys` (query) VALUES ('" + query + "');").c_str());
+        const string insertQuery("INSERT INTO `tmp_querys` (query) VALUES ('" + boost::replace_all_copy(query, "'", "''") + "');"); //replace ' to ''
+        return tmpDb->Execute(insertQuery.c_str());
     }
 
 private:
