@@ -496,19 +496,9 @@ void CClientSession::do_backup_chunk_write() {
 }
 
 void CClientSession::do_get_db_backup() {
-    bool isBackUpExist = false;
 
-    {// next thread will wait here, until current thread reseting backUpStatus if it 100%
-        boost::recursive_mutex::scoped_lock lk(clients_cs);
-        isBackUpExist = businessLogic_->getBackUpProgress() == 100; // backup exists if getBackUpProgress == 100%. Backup can be sent to a client only one time
-
-        if(isBackUpExist){
-            businessLogic_->resetBackUpProgress();
-        }
-    }
-
-    if(! isBackUpExist){
-        LOG(INFO) <<"Client sent 'get_db_backup', but backup doesn't exist or have been sent to another client";
+    if(! businessLogic_->isBackupExist(bakDbPath)){
+        LOG(INFO) <<"Backup doesn't exist";
         do_write("NONE : Backup doesn't exist, you can send 'backup_db' to create new and 'get_db_backup_progress' to check backup progress!");
         return;
     }
@@ -526,8 +516,6 @@ void CClientSession::do_get_db_backup() {
     }
 
     do_backup_chunk_write();
-
-    // after this server 'think' that backup doesn't exist!
 }
 
 void update_clients_changed()
