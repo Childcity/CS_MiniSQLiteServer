@@ -140,7 +140,7 @@ public:
 
     // throws BuisnessLogicErro
     // This method select saved querys, while backup was active, and execute theirs in main db
-    static void SyncDbWithTmp(const string &mainDbPath, const std::function<void(const size_t)> &waitFunc){
+    static void SyncDbWithTmp(const string mainDbPath, const std::function<void(const size_t)> &waitFunc){
 
         static std::recursive_mutex sync_;
 
@@ -272,6 +272,7 @@ public:
             throw BusinessLogicError(errMsg);
         }
 
+        std::replace(query.begin(), query.end(), '\'', '\'\''); //replace ' to ''
         return tmpDb->Execute(string("INSERT INTO `tmp_querys` (query) VALUES ('" + query + "');").c_str());
     }
 
@@ -326,6 +327,16 @@ private:
     static const string getTmpDbPath(){
         static const string tmpDbPath("temp_db.sqlite3");
         return tmpDbPath;
+    }
+
+public:
+    static string strToHexStr(const string &input){
+        std::ostringstream out;
+        for(const auto &it : input){
+            out << std::hex << std::setprecision(2) << std::setw(2)
+               << std::setfill('0') << static_cast<int>(it) <<" ";
+        }
+        return out.str();
     }
 
 private:
