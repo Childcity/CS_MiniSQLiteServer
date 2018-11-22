@@ -277,7 +277,11 @@ void CConfig::saveKeyBindings() {
 			"; DeepLogging = 0\n"
 			"\n"
 			"; Log folder. Default tmp directory\n"
-			"; LogDir = logs\n";
+			"; LogDir = logs\n"
+            "\n"
+            "; true - print log to standard error stream (by default it is console)\n"
+            "; false - print log to log file"
+            "; LogToStdErr = true";
 
 	//!!! This log massage go to stderr ONLY, because GLOG is not initialized yet !
 	LOG(WARNING) << "Default settings saved to'" << pathToSettings << "'";
