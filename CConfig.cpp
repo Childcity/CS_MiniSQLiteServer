@@ -214,7 +214,7 @@ void CConfig::saveKeyBindings() {
 	settings["DatabaseSettings"]["PathToDatabaseFile"] = defaultKeyBindings.dbPath;
 	settings["DatabaseSettings"]["PathToDatabaseBackupFile"] = defaultKeyBindings.bakDbPath;
 	settings["DatabaseSettings"]["PathToDatabaseRestoreFile"] = defaultKeyBindings.restoreDbPath;
-	settings["DatabaseSettings"]["NewBackupTimeMillisec"] = defaultKeyBindings.newBackupTimeoutMillisec;
+	settings["DatabaseSettings"]["NewBackupTimeMillisec"]("Timeout before next backup can be created") = defaultKeyBindings.newBackupTimeoutMillisec;
 	settings["DatabaseSettings"]["BlockOrClusterSize"]("Set, according to your file system block/cluster size. This make sqlite db more faster") = defaultKeyBindings.blockOrClusterSize;
 	settings["DatabaseSettings"]["WaitTimeMillisec"]("Time, that thread waiting before next attempt to begin 'write transaction'") = defaultKeyBindings.waitTimeMillisec;
 	settings["DatabaseSettings"]["CountOfAttempts"]("Number of attempts to begin 'write transaction'") = defaultKeyBindings.countOfEttempts;
@@ -277,7 +277,11 @@ void CConfig::saveKeyBindings() {
 			"; DeepLogging = 0\n"
 			"\n"
 			"; Log folder. Default tmp directory\n"
-			"; LogDir = logs\n";
+			"; LogDir = logs\n"
+            "\n"
+            "; true - print log to standard error stream (by default it is console)\n"
+            "; false - print log to log file"
+            "; LogToStdErr = true";
 
 	//!!! This log massage go to stderr ONLY, because GLOG is not initialized yet !
 	LOG(WARNING) << "Default settings saved to'" << pathToSettings << "'";
