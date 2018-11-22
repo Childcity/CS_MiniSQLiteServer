@@ -214,7 +214,7 @@ void CConfig::saveKeyBindings() {
 	settings["DatabaseSettings"]["PathToDatabaseFile"] = defaultKeyBindings.dbPath;
 	settings["DatabaseSettings"]["PathToDatabaseBackupFile"] = defaultKeyBindings.bakDbPath;
 	settings["DatabaseSettings"]["PathToDatabaseRestoreFile"] = defaultKeyBindings.restoreDbPath;
-	settings["DatabaseSettings"]["NewBackupTimeMillisec"] = defaultKeyBindings.newBackupTimeoutMillisec;
+	settings["DatabaseSettings"]["NewBackupTimeMillisec"]("Timeout before next backup can be created") = defaultKeyBindings.newBackupTimeoutMillisec;
 	settings["DatabaseSettings"]["BlockOrClusterSize"]("Set, according to your file system block/cluster size. This make sqlite db more faster") = defaultKeyBindings.blockOrClusterSize;
 	settings["DatabaseSettings"]["WaitTimeMillisec"]("Time, that thread waiting before next attempt to begin 'write transaction'") = defaultKeyBindings.waitTimeMillisec;
 	settings["DatabaseSettings"]["CountOfAttempts"]("Number of attempts to begin 'write transaction'") = defaultKeyBindings.countOfEttempts;
