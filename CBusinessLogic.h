@@ -9,13 +9,17 @@
 #include "CSQLiteDB.h"
 #include "glog/logging.h"
 
+#include <memory>
 #include <string>
-#include <boost/shared_ptr.hpp>
+#include <fstream>
 #include <utility>
+#include <boost/asio.hpp>
+#include <boost/shared_ptr.hpp>
 #include <boost/thread/pthread/recursive_mutex.hpp>
 #include <mutex>
 
 using std::string;
+using namespace boost::asio;
 
 class BusinessLogicError: public std::exception {
 public:
@@ -56,7 +60,7 @@ public:
         }
     }
 
-    string getCachedPlaceFree() const{
+    string getCachedPlaceFree() const {
         //NOT exclusive access to data! Allows only read, not write!
         boost::shared_lock< boost::shared_mutex > lock(bl_);
         return placeFree_;
@@ -118,24 +122,46 @@ public:
         }
 
         if(! backUpDb->IntegrityCheck()){
-            LOG(WARNING) << "ERROR: 'integrity check' failed ";
+            LOG(WARNING) << "ERROR: 'integrity check' failed: \n" <<backUpDb->GetLastError();
             resetBackUpProgress();
             return -1;
         }
+
+            VLOG(1) <<"DEBUG: integrity check OK";
 
         boost::unique_lock<boost::shared_mutex> lock(bl_);
         backupProgress_ = 100;
         return 100;
     }
 
-    int getBackUpProgress() const{
+    int getBackUpProgress() const {
         boost::shared_lock< boost::shared_mutex > lock(bl_); //NOT exclusive access to data! Allows only read, not write!
         return backupProgress_;
+    }
+
+    bool isBackupExist(const string &backupPath) const {
+        return /*(getBackUpProgress() == 100) &&*/ std::ifstream{backupPath}.good() ;
     }
 
     void resetBackUpProgress(){
         boost::unique_lock<boost::shared_mutex> lock(bl_);
         backupProgress_ = -1;
+    }
+
+
+    void setTimeoutOnNextBackupCmd(io_context &io_context, const size_t ms){
+        if(backupTimer_)
+            return;
+
+        auto self = shared_from_this();
+        backupTimer_ = std::make_unique<deadline_timer>(io_context, boost::posix_time::millisec(ms));
+        backupTimer_->async_wait([self, this](const boost::system::error_code &error){
+            if(error){
+                LOG(WARNING) <<"BUSINESS_LOGIC: backup timer error: " << error;
+            }
+            resetBackUpProgress();
+            backupTimer_.reset();
+        });
     }
 
     // throws BuisnessLogicErro
@@ -272,7 +298,8 @@ public:
             throw BusinessLogicError(errMsg);
         }
 
-        return tmpDb->Execute(string("INSERT INTO `tmp_querys` (query) VALUES ('" + query + "');").c_str());
+        const string insertQuery("INSERT INTO `tmp_querys` (query) VALUES ('" + boost::replace_all_copy(query, "'", "''") + "');"); //replace ' to ''
+        return tmpDb->Execute(insertQuery.c_str());
     }
 
 private:
@@ -328,12 +355,23 @@ private:
         return tmpDbPath;
     }
 
+public:
+    static string strToHexStr(const string &input){
+        std::ostringstream out;
+        for(const auto &it : input){
+            out << std::hex << std::setprecision(2) << std::setw(2)
+               << std::setfill('0') << static_cast<int>(it) <<" ";
+        }
+        return out.str();
+    }
+
 private:
     mutable boost::shared_mutex bl_;
     string placeFree_;
 
     int backupProgress_;
 
+    std::unique_ptr<deadline_timer> backupTimer_;
 };
 
 

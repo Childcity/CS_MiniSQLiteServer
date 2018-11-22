@@ -426,19 +426,20 @@ void CClientSession::do_db_backup() {
         msg = "ERROR: db was not backuped: " + db->GetLastError();
         LOG(WARNING) << msg;
     }else if(100 == backUpStatus){
+        businessLogic_->setTimeoutOnNextBackupCmd(io_context_, newBackupTimeout);
 
         // start executing query from tmp db in background
         auto self = shared_from_this();
         io_context_.post([self, this](){ //async call
             try {
-                businessLogic_->SyncDbWithTmp(dbPath, [=](size_t ms) {
-                    // Construct a timer without setting an expiry time.
-                    deadline_timer timer(io_context_);
-                    // Set an expiry time relative to now.
-                    timer.expires_from_now(boost::posix_time::millisec(ms));
-                    // Wait for the timer to expire.
-                    timer.wait();
-                });
+                    businessLogic_->SyncDbWithTmp(dbPath, [=](size_t ms) {
+                        // Construct a timer without setting an expiry time.
+                        deadline_timer timer(io_context_);
+                        // Set an expiry time relative to now.
+                        timer.expires_from_now(boost::posix_time::millisec(ms));
+                        // Wait for the timer to expire.
+                        timer.wait();
+                    });
             }catch (BusinessLogicError &e){
                 LOG(WARNING) <<"Sync Error [" <<e.what() <<"]";
             }
@@ -496,19 +497,9 @@ void CClientSession::do_backup_chunk_write() {
 }
 
 void CClientSession::do_get_db_backup() {
-    bool isBackUpExist = false;
 
-    {// next thread will wait here, until current thread reseting backUpStatus if it 100%
-        boost::recursive_mutex::scoped_lock lk(clients_cs);
-        isBackUpExist = businessLogic_->getBackUpProgress() == 100; // backup exists if getBackUpProgress == 100%. Backup can be sent to a client only one time
-
-        if(isBackUpExist){
-            businessLogic_->resetBackUpProgress();
-        }
-    }
-
-    if(! isBackUpExist){
-        LOG(INFO) <<"Client sent 'get_db_backup', but backup doesn't exist or have been sent to another client";
+    if(! businessLogic_->isBackupExist(bakDbPath)){
+        LOG(INFO) <<"Backup doesn't exist";
         do_write("NONE : Backup doesn't exist, you can send 'backup_db' to create new and 'get_db_backup_progress' to check backup progress!");
         return;
     }
@@ -526,8 +517,6 @@ void CClientSession::do_get_db_backup() {
     }
 
     do_backup_chunk_write();
-
-    // after this server 'think' that backup doesn't exist!
 }
 
 void update_clients_changed()

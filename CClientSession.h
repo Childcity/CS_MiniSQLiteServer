@@ -32,7 +32,7 @@ private:
 	typedef boost::system::error_code error_code;
 	using businessLogic_ptr = boost::shared_ptr<CBusinessLogic>;
 
-    explicit CClientSession(io_context &io_context, const size_t maxTimeout, businessLogic_ptr businessLogic);
+    explicit CClientSession(io_context &io_context, size_t maxTimeout, businessLogic_ptr businessLogic);
 
 public:
 
