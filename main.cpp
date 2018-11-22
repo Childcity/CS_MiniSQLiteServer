@@ -18,6 +18,8 @@
 //Global variable declared in main.h
 std::string dbPath;
 std::string bakDbPath;
+std::string restoreDbPath;
+size_t newBackupTimeout;
 size_t sqlWaitTime;
 size_t sqlCountOfAttempts;
 long blockOrClusterSize;
@@ -66,6 +68,8 @@ int main(int argc, char *argv[])
 
         dbPath = cfg.keyBindings.dbPath;
         bakDbPath = cfg.keyBindings.bakDbPath;
+		restoreDbPath = cfg.keyBindings.restoreDbPath;
+		newBackupTimeout = static_cast<size_t>(cfg.keyBindings.newBackupTimeoutMillisec);
         blockOrClusterSize = cfg.keyBindings.blockOrClusterSize;
         sqlWaitTime = static_cast<size_t>(cfg.keyBindings.waitTimeMillisec);
         sqlCountOfAttempts = static_cast<size_t>(cfg.keyBindings.countOfEttempts);
@@ -109,9 +113,18 @@ void TestSqlite3Settings(CConfig *cfg){
 
     LOG(INFO) <<"Connection to db and tmp db: Ok";
 
+
+	VLOG(1) <<"DEBUG: integrity checking...";
+	if(! db->IntegrityCheck()){
+        LOG(WARNING)  << "Integrity check failed on " << cfg->keyBindings.dbPath
+                      <<"\n" <<db->GetLastError();
+	}else{
+        LOG(INFO) <<"Integrity check: OK";
+	}
+
+
 	VLOG(1) <<"DEBUG: synchronization main db with tmp db...";
 	CBusinessLogic::SyncDbWithTmp(cfg->keyBindings.dbPath, [=](size_t ms) { (void)ms; /*here we shouldn't sleep, just skip it*/ });
-
     LOG(INFO) <<"Synchronization: OK";
 }
 

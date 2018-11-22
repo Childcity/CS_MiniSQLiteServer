@@ -16,6 +16,8 @@ CConfig::KeyBindings::KeyBindings(const string exePath)
 
     dbPath = exeFolderPath_ + "defaultEmptyDb.sqlite3";
 	bakDbPath = exeFolderPath_ + "backup.sqlite3";
+	restoreDbPath = exeFolderPath_ + "restore.sqlite3";
+	newBackupTimeoutMillisec = 30 * 60 * 1000; //30 min
 	blockOrClusterSize = 4096;
 	waitTimeMillisec = 50;
 	countOfEttempts = 200;
@@ -145,6 +147,8 @@ void CConfig::updateKeyBindings() {
 		//DB settings
 		keyBindings.dbPath = settings.Get("DatabaseSettings", "PathToDatabaseFile", "_a");
 		keyBindings.bakDbPath = settings.Get("DatabaseSettings", "PathToDatabaseBackupFile", "_a");
+		keyBindings.newBackupTimeoutMillisec = settings.GetInteger("DatabaseSettings", "NewBackupTimeMillisec", -1L);
+		keyBindings.restoreDbPath = settings.Get("DatabaseSettings", "PathToDatabaseRestoreFile", "_a");
 		keyBindings.blockOrClusterSize = settings.GetInteger("DatabaseSettings", "BlockOrClusterSize", -1L);
 		keyBindings.waitTimeMillisec = settings.GetInteger("DatabaseSettings", "WaitTimeMillisec", -1L);
 		keyBindings.countOfEttempts = settings.GetInteger("DatabaseSettings", "CountOfAttempts", -1L);
@@ -162,8 +166,10 @@ void CConfig::updateKeyBindings() {
 			|| keyBindings.blockOrClusterSize == -1L || keyBindings.countOfEttempts <= 0L
 			|| keyBindings.waitTimeMillisec <= 0L
 			|| keyBindings.timeoutToDropConnection <= 0L
+			|| keyBindings.newBackupTimeoutMillisec <= 0L
 			|| keyBindings.dbPath == "_a" || keyBindings.dbPath.empty()
-			|| keyBindings.bakDbPath == "_a" || keyBindings.bakDbPath.empty()
+			|| keyBindings.restoreDbPath == "_a"
+			|| keyBindings.bakDbPath == "_a"
 			|| keyBindings.logDir == "_a" || keyBindings.logDir.empty()
 			|| keyBindings.serviceName == "_a" || keyBindings.serviceName.empty()) {
 			//!!! This log massage go to stderr ONLY, because GLOG is not initialized yet !
@@ -180,8 +186,12 @@ void CConfig::updateKeyBindings() {
 			keyBindings.serviceName = defaultKeyBindings.serviceName;
 		}
 
-		if(keyBindings.dbPath.empty()){
-			keyBindings.dbPath = defaultKeyBindings.dbPath;
+		if(keyBindings.restoreDbPath.empty()){
+			keyBindings.restoreDbPath = defaultKeyBindings.restoreDbPath;
+		}
+
+		if(keyBindings.bakDbPath.empty()){
+			keyBindings.bakDbPath = defaultKeyBindings.bakDbPath;
 		}
 
 		//If we |here|, settings loaded correctly and we can continue
@@ -203,6 +213,8 @@ void CConfig::saveKeyBindings() {
 	//DB settings
 	settings["DatabaseSettings"]["PathToDatabaseFile"] = defaultKeyBindings.dbPath;
 	settings["DatabaseSettings"]["PathToDatabaseBackupFile"] = defaultKeyBindings.bakDbPath;
+	settings["DatabaseSettings"]["PathToDatabaseRestoreFile"] = defaultKeyBindings.restoreDbPath;
+	settings["DatabaseSettings"]["NewBackupTimeMillisec"] = defaultKeyBindings.newBackupTimeoutMillisec;
 	settings["DatabaseSettings"]["BlockOrClusterSize"]("Set, according to your file system block/cluster size. This make sqlite db more faster") = defaultKeyBindings.blockOrClusterSize;
 	settings["DatabaseSettings"]["WaitTimeMillisec"]("Time, that thread waiting before next attempt to begin 'write transaction'") = defaultKeyBindings.waitTimeMillisec;
 	settings["DatabaseSettings"]["CountOfAttempts"]("Number of attempts to begin 'write transaction'") = defaultKeyBindings.countOfEttempts;
