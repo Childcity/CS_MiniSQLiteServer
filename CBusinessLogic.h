@@ -9,14 +9,17 @@
 #include "CSQLiteDB.h"
 #include "glog/logging.h"
 
+#include <memory>
 #include <string>
 #include <fstream>
 #include <utility>
+#include <boost/asio.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/thread/pthread/recursive_mutex.hpp>
 #include <mutex>
 
 using std::string;
+using namespace boost::asio;
 
 class BusinessLogicError: public std::exception {
 public:
@@ -119,10 +122,12 @@ public:
         }
 
         if(! backUpDb->IntegrityCheck()){
-            LOG(WARNING) << "ERROR: 'integrity check' failed ";
+            LOG(WARNING) << "ERROR: 'integrity check' failed: \n" <<backUpDb->GetLastError();
             resetBackUpProgress();
             return -1;
         }
+
+            VLOG(1) <<"DEBUG: integrity check OK";
 
         boost::unique_lock<boost::shared_mutex> lock(bl_);
         backupProgress_ = 100;
@@ -135,12 +140,28 @@ public:
     }
 
     bool isBackupExist(const string &backupPath) const {
-        return (getBackUpProgress() == 100) && std::ifstream{backupPath} ;
+        return /*(getBackUpProgress() == 100) &&*/ std::ifstream{backupPath}.good() ;
     }
 
     void resetBackUpProgress(){
         boost::unique_lock<boost::shared_mutex> lock(bl_);
         backupProgress_ = -1;
+    }
+
+
+    void setTimeoutOnNextBackupCmd(io_context &io_context, const size_t ms){
+        if(backupTimer_)
+            return;
+
+        auto self = shared_from_this();
+        backupTimer_ = std::make_unique<deadline_timer>(io_context, boost::posix_time::millisec(ms));
+        backupTimer_->async_wait([self, this](const boost::system::error_code &error){
+            if(error){
+                LOG(WARNING) <<"BUSINESS_LOGIC: backup timer error: " << error;
+            }
+            resetBackUpProgress();
+            backupTimer_.reset();
+        });
     }
 
     // throws BuisnessLogicErro
@@ -350,6 +371,7 @@ private:
 
     int backupProgress_;
 
+    std::unique_ptr<deadline_timer> backupTimer_;
 };
 
 

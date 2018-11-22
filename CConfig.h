@@ -21,6 +21,8 @@ private:
 
 		string dbPath;
         string bakDbPath;
+		string restoreDbPath;
+		long newBackupTimeoutMillisec;
 		long blockOrClusterSize;
 		long waitTimeMillisec;
 		long countOfEttempts;

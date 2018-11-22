@@ -426,19 +426,20 @@ void CClientSession::do_db_backup() {
         msg = "ERROR: db was not backuped: " + db->GetLastError();
         LOG(WARNING) << msg;
     }else if(100 == backUpStatus){
+        businessLogic_->setTimeoutOnNextBackupCmd(io_context_, newBackupTimeout);
 
         // start executing query from tmp db in background
         auto self = shared_from_this();
         io_context_.post([self, this](){ //async call
             try {
-                businessLogic_->SyncDbWithTmp(dbPath, [=](size_t ms) {
-                    // Construct a timer without setting an expiry time.
-                    deadline_timer timer(io_context_);
-                    // Set an expiry time relative to now.
-                    timer.expires_from_now(boost::posix_time::millisec(ms));
-                    // Wait for the timer to expire.
-                    timer.wait();
-                });
+                    businessLogic_->SyncDbWithTmp(dbPath, [=](size_t ms) {
+                        // Construct a timer without setting an expiry time.
+                        deadline_timer timer(io_context_);
+                        // Set an expiry time relative to now.
+                        timer.expires_from_now(boost::posix_time::millisec(ms));
+                        // Wait for the timer to expire.
+                        timer.wait();
+                    });
             }catch (BusinessLogicError &e){
                 LOG(WARNING) <<"Sync Error [" <<e.what() <<"]";
             }
