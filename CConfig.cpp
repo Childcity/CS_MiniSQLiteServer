@@ -109,6 +109,7 @@ void CConfig::initGlog()
 	FLAGS_v = static_cast<google::int32>(keyBindings.verbousLog);
 	FLAGS_minloglevel = static_cast<google::int32>(keyBindings.minLogLevel);
 
+	google::InstallFailureSignalHandler();
 
 	#ifdef WIN32
 	CreateDirectoryW(ConverterUTF8_UTF16<std::string, std::wstring>(keyBindings.logDir).c_str(), NULL);
