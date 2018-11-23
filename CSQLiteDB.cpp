@@ -45,6 +45,10 @@ string CSQLiteDB::GetLastError()
 
 bool   CSQLiteDB::isConnected()
 {
+    if(pSQLiteConn->pCon == nullptr){
+        bConnected_ = false;
+    }
+
     return bConnected_;
 }
 
@@ -348,7 +352,7 @@ bool CSQLiteDB::BackupDb(const char *zFilename, const std::function<void(const i
             ** 250 ms before repeating. */
             do {
                 rc = sqlite3_backup_step(pBackup, 2048);
-                if(xProgress != nullptr){
+                if(xProgress){
                     xProgress(sqlite3_backup_remaining(pBackup), sqlite3_backup_pagecount(pBackup));
                 }
 
