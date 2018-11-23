@@ -46,6 +46,7 @@ public:
     explicit CBusinessLogic()
         : placeFree_("-1")
         , backupProgress_(-1)
+        , restoreProgress_(-1)
     {/*static int instCount = 0; instCount++;VLOG(1) <<instCount;*/}
 
      //~CBusinessLogic(){/*VLOG(1) <<"DEBUG: free CBusinessLogic";*/}
@@ -97,12 +98,12 @@ public:
             backupProgress_ = 0;
         }
 
-
         auto self = shared_from_this();
         backupStatus = dbPtr->BackupDb(backupPath.c_str(), [self, this](const int remaining, const int total){
                 //exclusive access to data!
                 boost::unique_lock<boost::shared_mutex> lock(bl_);
-                backupProgress_ = static_cast<const int>(100) * (total - remaining) / total;
+                //SQLite BUG: total can be 0!!!! So we should check it on zero
+                backupProgress_ = static_cast<int>(100 * (total - remaining) / (total ? total:1));
                 if(backupProgress_ == 100)
                     backupProgress_ = 99;
                 VLOG(1) << "DEBUG: backup in progress [" <<backupProgress_ <<"%]";
@@ -162,6 +163,24 @@ public:
             resetBackUpProgress();
             backupTimer_.reset();
         });
+    }
+
+    void restoreFromDbFromFile(){
+        //open restore db
+    }
+
+    int getRestoreProgress() const {
+        boost::shared_lock< boost::shared_mutex > lock(bl_);
+        return restoreProgress_;
+    }
+
+    bool isRestoreExecuting() const {
+        return getRestoreProgress() > 0;
+    }
+
+    void resetRestoreProgress(){
+        boost::unique_lock<boost::shared_mutex> lock(bl_);
+        restoreProgress_ = -1;
     }
 
     // throws BuisnessLogicErro
@@ -370,8 +389,10 @@ private:
     string placeFree_;
 
     int backupProgress_;
+    int restoreProgress_;
 
     std::unique_ptr<deadline_timer> backupTimer_;
+
 };
 
 
