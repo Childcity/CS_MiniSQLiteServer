@@ -1,5 +1,4 @@
 ﻿#include "CClientSession.h"
-#include <utility>
 
 boost::recursive_mutex clients_cs;
 typedef boost::shared_ptr<CClientSession> client_ptr;
@@ -135,7 +134,12 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
         VLOG(1) << "DEBUG: received msg '" << inMsg << "\nDEBUG: received bytes from user '" <<username() <<"' bytes: " << bytes
                 << " delay: " <<(boost::posix_time::microsec_clock::local_time() - last_ping_).total_milliseconds() <<"ms";
 
-        if(0 == inMsg.find(u8"UPDATE Config SET PlaceFree")){
+        if(businessLogic_->isRestoreExecuting()){
+            VLOG(1) <<"DEBUG: Server is busy at the moment. ";
+            do_write("Server is busy at the moment. Database restore progress [" + std::to_string(businessLogic_->getRestoreProgress()) + "%]");
+            stop();
+
+        }else if(0 == inMsg.find(u8"UPDATE Config SET PlaceFree")){
             businessLogic_->updatePlaceFree(db, inMsg, "select PlaceFree from Config;");
             do_write("NONE");
 
@@ -147,6 +151,47 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
                 // if an error occur, send last PlaceFree. If last PlaceFree == -1, send 0
                 do_write(businessLogic_->getCachedPlaceFree() == "-1" ? "0" : businessLogic_->getCachedPlaceFree());
             }
+
+        }else if(0 == inMsg.find(u8"restore_db")){
+            string msg;
+            int progress = businessLogic_->getBackUpProgress();
+
+            if((progress > -1 && progress <100)){
+                msg = "Restore can't be executed. Backup in progress [" + std::to_string(progress) + "%]";
+                LOG(INFO) <<msg;
+            }else{
+                if(! businessLogic_->prepareBeforeRestore(dbPath, restoreDbPath)){
+                    msg = "Restore can't be executed. System error or restore db corrupted";
+                }else{
+                    auto self = shared_from_this();
+                    cli_ptr_vector clients_copy;
+                    {
+                        boost::recursive_mutex::scoped_lock lk(clients_cs);
+                        clients_copy = clients;
+                    }
+
+                    for(const auto &it : clients_copy )
+                        if(it != self)
+                            it->stop();
+
+                    io_context_.post([self, this](){ //async call
+                        // wait, before all existing call to db will be complete, and clients go away
+                        deadline_timer timer(io_context_);
+                        timer.expires_from_now(boost::posix_time::millisec(5000));
+                        timer.wait();
+
+                        businessLogic_->restoreDbFromFile(dbPath, restoreDbPath);
+                        stop();
+                        return;
+                        //do_write("restore db complite [100%]");
+                        //businessLogic_->resetRestoreProgress();
+                    });
+
+                    msg = "restore db in progress [0%]";
+                }
+            }
+
+            do_write(msg);
 
         }else if(0 == inMsg.find(u8"backup_db")){
             auto self = shared_from_this();
@@ -184,7 +229,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
         }
 
     }catch (BusinessLogicError &e){
-        LOG(WARNING) <<"BusinessLogic error [" <<e.what() <<"]";
+        LOG(WARNING) <<"BusinessLogic [" <<e.what() <<"]";
         do_write(e.what());
     }catch (...){
         stop();
@@ -202,7 +247,7 @@ void CClientSession::on_login(const string &msg)
     VLOG(1) << "DEBUG: logged in: " << username_ << std::endl;
 
     do_write(string("login ok\n"));
-    update_clients_changed();
+    //update_clients_changed();
 }
 
 void CClientSession::on_ping()
@@ -227,9 +272,6 @@ void CClientSession::on_clients()
 
     for(const auto &it : clients_copy )
         msg += it->username() + " ";
-
-    //for( cli_ptr_vector::const_iterator b = copy.begin(), e = copy.end(); b != e; ++b )
-    //	msg += (*b)->username() + " ";
 
     do_write(string("clients: " + msg + "\n"));
 }
@@ -346,7 +388,7 @@ void CClientSession::do_ask_db(string &query)
                 effectedData =  db->Execute(query.c_str());
             }else{
                 effectedData = businessLogic_->SaveQueryToTmpDb(query);
-                VLOG(1) <<"DEBUG: insert to tmp while backuping. Effected data: " <<effectedData;
+                VLOG(1) <<"DEBUG: insert to tmp db while backuping. Effected data: " <<effectedData;
             }
 
 
@@ -492,7 +534,7 @@ void CClientSession::do_backup_chunk_write() {
         return;
     }
 
-    async_write(sock_, buffer(backupReader_.currentChunk(), backupReader_.chunkSize()),
+    async_write(sock_, buffer(backupReader_.getCurrentChunk(), backupReader_.getCurrentChunkSize()),
                            bind(&CClientSession::on_backup_chunk_write, shared_from_this(), _1, _2));
 }
 
@@ -529,8 +571,4 @@ void update_clients_changed()
 
     for(const auto &it : clients_copy )
         it->set_clients_changed();
-
-    //old variant
-    //for( cli_ptr_vector::iterator b = copy.begin(), e = copy.end(); b != e; ++b )
-    //	(*b)->set_clients_changed();
 }

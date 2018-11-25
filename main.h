@@ -6,6 +6,7 @@
 //#define GOOGLE_STRIP_LOG 0 // cut all glog strings from .exe
 
 #include <string>
+#include <boost/thread/pthread/recursive_mutex.hpp>
 #include "CConfig.h"
 
 extern std::string dbPath;
@@ -15,6 +16,8 @@ extern size_t newBackupTimeout;
 extern size_t sqlWaitTime;
 extern size_t sqlCountOfAttempts;
 extern long blockOrClusterSize;
+
+extern boost::recursive_mutex clients_cs;
 
 int main(int argc, char *argv[]);
 

@@ -6,7 +6,9 @@
 #define CS_MINISQLITESERVER_CBUSINESSLOGIC_H
 #pragma once
 
+#include "main.h"
 #include "CSQLiteDB.h"
+#include "CBinaryFileReader.h"
 #include "glog/logging.h"
 
 #include <memory>
@@ -165,27 +167,138 @@ public:
         });
     }
 
-    void restoreFromDbFromFile(){
-        //open restore db
+    bool prepareBeforeRestore(const string &mainDbPath, const string &restoreDbPath) {
+        string errMsg;
+        CBinaryFileReader fileReader;
+
+        {//exclusive access to data!
+            boost::unique_lock<boost::shared_mutex> lock(restore_mtx_);
+            restoreProgress_ = 0;
+        }
+
+        std::ofstream fileWriter(mainDbPath, std::ios::binary);
+
+        if((! fileReader.open(restoreDbPath)) && (! fileReader.open(restoreDbPath))){
+            errMsg = "can't open for read restore file '" + restoreDbPath + "'";
+            LOG(WARNING) << "BUSINESS_LOGIC: prepare for db restoring error: " <<errMsg;
+            //BusinessLogicError()
+            resetRestoreProgress();
+            return false;
+        }
+
+        if(! fileWriter.is_open()){
+            errMsg = "can't open for write current db file '" + mainDbPath + "'";
+            LOG(WARNING) << "BUSINESS_LOGIC: prepare for db restoring error: " <<errMsg;
+            //BusinessLogicError()
+            resetRestoreProgress();
+            return false;
+        }
+
+        CSQLiteDB::ptr restoreDb = CSQLiteDB::new_(restoreDbPath);
+
+        if(! restoreDb->OpenConnection()){
+            errMsg = "can't open restore db '" + restoreDbPath + "': " + restoreDb->GetLastError();
+            LOG(WARNING) << "BUSINESS_LOGIC: prepare for db restoring error: " <<errMsg;
+            //BusinessLogicError()
+            resetRestoreProgress();
+            return false;
+        }
+
+        VLOG(1) <<"DEBUG: (restore db) - integrity checking...";
+        if(! restoreDb->IntegrityCheck()){
+            errMsg = "integrity check failed for '" + restoreDbPath + "': \n" + restoreDb->GetLastError();
+            LOG(WARNING) << "BUSINESS_LOGIC: prepare for db restoring error: " <<errMsg;
+            //BusinessLogicError()
+            resetRestoreProgress();
+            return false;
+        }else{
+            LOG(INFO) <<"Restore db: integrity check: OK";
+        }
+
+        return true;
+    }
+
+    void restoreDbFromFile(const string &mainDbPath, const string &restoreDbPath){
+        string errMsg;
+        CBinaryFileReader fileReader;
+        std::ofstream fileWriter(mainDbPath, std::ios::binary);
+
+        if((! fileReader.open(restoreDbPath)) && (! fileReader.open(restoreDbPath))){
+            errMsg = "can't open for read restore file '" + restoreDbPath + "'";
+            LOG(WARNING) << "BUSINESS_LOGIC: restore db error: " <<errMsg;
+            resetRestoreProgress();
+            //BusinessLogicError()
+            return;
+        }
+
+        if(! fileWriter.is_open()){
+            errMsg = "can't open for write current db file '" + mainDbPath + "'";
+            LOG(WARNING) << "BUSINESS_LOGIC: restore db error: " <<errMsg;
+            resetRestoreProgress();
+            //BusinessLogicError()
+            return;
+        }
+
+        try {
+            long progress = -1;
+            while(fileReader.nextChunk()){
+                fileWriter.write(fileReader.getCurrentChunk(), fileReader.getCurrentChunkSize());
+                progress = fileReader.getProgress();
+
+                if(progress == 100l)
+                    progress = 99l;
+
+                VLOG(1) << "DEBUG: restore db in progress [" <<progress <<"%]";
+
+                {//exclusive access to data!
+                    boost::unique_lock<boost::shared_mutex> lock(restore_mtx_);
+                    restoreProgress_ = static_cast<int>(progress);
+                }
+
+            }
+        }catch (...){
+            LOG(WARNING) <<"BUSINESS_LOGIC: restore db error: unknown system error";
+        }
+
+
+        CSQLiteDB::ptr mainDb = CSQLiteDB::new_(mainDbPath);
+
+        if(! mainDb->OpenConnection()){
+            errMsg = "can't open main db '" + mainDbPath + "': " + mainDb->GetLastError();
+            LOG(WARNING) << "BUSINESS_LOGIC: main db error: " <<errMsg;
+        }
+
+        VLOG(1) <<"DEBUG: (main db) - integrity checking...";
+        if(! mainDb->IntegrityCheck()){
+            errMsg = "integrity check failed for '" + mainDbPath + "': \n" + mainDb->GetLastError();
+            LOG(WARNING) << "BUSINESS_LOGIC: main db error: " <<errMsg;
+        }else{
+            LOG(INFO) << "Main db: integrity check: OK";
+        }
+
+        LOG(INFO) << "Restore db complete [100%]";
+
+        resetRestoreProgress();
     }
 
     int getRestoreProgress() const {
-        boost::shared_lock< boost::shared_mutex > lock(bl_);
+        boost::shared_lock< boost::shared_mutex > lock(restore_mtx_);
         return restoreProgress_;
     }
 
     bool isRestoreExecuting() const {
-        return getRestoreProgress() > 0;
+        boost::shared_lock< boost::shared_mutex > lock(restore_mtx_);
+        return restoreProgress_ > -1;
     }
 
     void resetRestoreProgress(){
-        boost::unique_lock<boost::shared_mutex> lock(bl_);
+        boost::unique_lock<boost::shared_mutex> lock(restore_mtx_);
         restoreProgress_ = -1;
     }
 
     // throws BuisnessLogicErro
     // This method select saved querys, while backup was active, and execute theirs in main db
-    static void SyncDbWithTmp(const string mainDbPath, const std::function<void(const size_t)> &waitFunc){
+    static void SyncDbWithTmp(const string &mainDbPath, const std::function<void(const size_t)> &waitFunc){
 
         static std::recursive_mutex sync_;
 
@@ -219,6 +332,13 @@ public:
         do{
             res = nullptr;
             waitFunc(200); //sleep to give other connections executed
+
+            // if main db is not connected, try to reconnect
+            for (int j = 0; (! mainDb->isConnected()) && j < 20; ++j) {
+                VLOG(1) <<"!!!!!!!!!!!!!Main db is not connected!";
+                waitFunc(500);
+                mainDb->OpenConnection();
+            }
 
             res = tmpDb->ExecuteSelect("SELECT rowid, * FROM `tmp_querys` ORDER BY rowid ASC LIMIT 1;");
 
@@ -268,7 +388,7 @@ public:
                 LOG(WARNING) << errorMsg;
             }
 
-            // VLOG(1) <<"DEBUG: delete row OK: " <<deleteResult;
+            //VLOG(1) <<"DEBUG: delete row OK: " <<deleteResult;
 
         }while(true);
     }
@@ -346,7 +466,7 @@ private:
             res->ReleaseStatement();
 
             if(result.empty()){
-                result = "ERROR: db returned empty string";
+                errorMsg = "ERROR: db returned empty string";
                 LOG(WARNING) << errorMsg;
                 throw BusinessLogicError(errorMsg);
             }
@@ -385,7 +505,7 @@ public:
     }
 
 private:
-    mutable boost::shared_mutex bl_;
+    mutable boost::shared_mutex bl_, restore_mtx_;
     string placeFree_;
 
     int backupProgress_;

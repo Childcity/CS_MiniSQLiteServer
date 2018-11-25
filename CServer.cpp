@@ -30,7 +30,7 @@ void CServer::do_accept(CClientSession::ptr client, const boost::system::error_c
 	client->start();
 	CClientSession::ptr new_client = CClientSession::new_(io_context_, maxTimeout_, businessLogic_);
 
-	VLOG(1) << "DEBUG: accept NEXT client";
+	VLOG(1) << "DEBUG: accept next client";
 	acceptor_.async_accept(new_client->sock(), bind(&CServer::do_accept, this, new_client, _1));
 }
 

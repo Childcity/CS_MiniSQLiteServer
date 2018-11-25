@@ -14,6 +14,9 @@ class CBinaryFileReader{
     enum {CHUNK_SIZE = 2097152}; // 2Mb by default
     boost::scoped_array<char> buffer_{};
     std::ifstream fileStream_;
+    long readerProgress_;
+    long bytesRead_;
+    long fileSize_;
 
 public:
     CBinaryFileReader();
@@ -28,9 +31,13 @@ public:
 
     bool nextChunk();
 
-    const char *currentChunk() const;
+    const char *getCurrentChunk() const;
 
-    size_t chunkSize() const;
+    size_t getCurrentChunkSize() const;
+
+    long getFileSize() const;
+
+    long getProgress() const;
 
     bool isEOF() const;
 };
