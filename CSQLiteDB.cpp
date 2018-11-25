@@ -43,9 +43,9 @@ string CSQLiteDB::GetLastError()
     return strLastError_;
 }
 
-bool   CSQLiteDB::isConnected()
+bool CSQLiteDB::isConnected()
 {
-    if(pSQLiteConn->pCon == nullptr){
+    if(pSQLiteConn->pCon == nullptr || pSQLiteConn->pCon == 0){
         bConnected_ = false;
     }
 
@@ -106,6 +106,9 @@ int CSQLiteDB::Execute(const char *sqlQuery)
 
     //Waiting, while DB become not busy
     for (size_t triesToBeginTrans = 0; ! BeginTransaction(); ++triesToBeginTrans) {
+        if(! isConnected())
+            return -1;
+
         VLOG(1) << "DEBUG: DB is busy! tries to begin transaction = " << triesToBeginTrans << ". Handle(" << pSQLiteConn->pStmt <<")";
         fWaitFunction_(128);
     }
@@ -197,6 +200,12 @@ bool CSQLiteDB::PrepareSql(const char *sqlQuery) {
 
     do
     {
+        if(! isConnected()){
+            LOG(WARNING) << "SQLITE: prepare statement error. Db is not connected!" << std::endl
+                         << "Statement: " <<sqlQuery;
+            return false;
+        }
+
         rc = sqlite3_prepare_v2(pSQLiteConn->pCon, sqlQuery, -1, &pSQLiteConn->pStmt, nullptr);
 
         if( (rc == SQLITE_BUSY) || (rc == SQLITE_LOCKED) )
@@ -285,7 +294,7 @@ bool CSQLiteDB::EndTransaction() {
         return false;
     }
 
-    if( !PrepareSql("COMMIT;") ) {
+    if( ! PrepareSql("COMMIT;") ) {
         strLastError_ = "end Transaction error";
         LOG(WARNING) << "SQLITE: " << strLastError_ << " on handle(" << pSQLiteConn->pStmt <<")";
         return false;
@@ -351,7 +360,7 @@ bool CSQLiteDB::BackupDb(const char *zFilename, const std::function<void(const i
             ** indicates that there are still further pages to copy, sleep for
             ** 250 ms before repeating. */
             do {
-                rc = sqlite3_backup_step(pBackup, 2048);
+                rc = sqlite3_backup_step(pBackup, 4096);
                 if(xProgress){
                     xProgress(sqlite3_backup_remaining(pBackup), sqlite3_backup_pagecount(pBackup));
                 }
