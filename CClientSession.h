@@ -100,7 +100,7 @@ private:
 private:
 
 	mutable boost::recursive_mutex cs_;
-	enum{ MAX_WRITE_BUFFER = 20971520, MAX_READ_BUFFER = 1024 };
+	enum{ MAX_WRITE_BUFFER = 20971520, MAX_READ_BUFFER = 500*1024 };
 	const size_t maxTimeout_;
     //const char endOfMsg[0] = {};
 	const size_t sizeEndOfMsg = 1;
