@@ -140,8 +140,17 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
             stop();
 
         }else if(0 == inMsg.find(u8"UPDATE Config SET PlaceFree")){
-            businessLogic_->updatePlaceFree(db, inMsg, "select PlaceFree from Config;");
-            do_write("NONE");
+            int progress = businessLogic_->getBackUpProgress();
+            string msg;
+
+            if(progress > -1 && progress <100) {
+                msg = "'UPDATE Config SET PlaceFree...'. Backup in progress [" + std::to_string(progress) + "%]";
+            }else{
+                businessLogic_->updatePlaceFree(db, inMsg, "select PlaceFree from Config;");
+                msg = "NONE";
+            }
+
+            do_write(msg);
 
         }else if(0 == inMsg.find(u8"get_place_free")) {
             try {
@@ -156,7 +165,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
             string msg;
             int progress = businessLogic_->getBackUpProgress();
 
-            if((progress > -1 && progress <100)){
+            if(progress > -1 && progress <100){
                 msg = "Restore can't be executed. Backup in progress [" + std::to_string(progress) + "%]";
                 LOG(INFO) <<msg;
             }else{
