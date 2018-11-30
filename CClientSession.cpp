@@ -38,8 +38,9 @@ void CClientSession::start()
         timer.wait();
     });
     LOG_IF(WARNING, ! db->OpenConnection()) << "ERROR: can't connect to db: " <<db->GetLastError();
-    db->Execute(string(/*"PRAGMA journal_mode = WAL; */"PRAGMA encoding = \"UTF-8\"; "
+    IResult *res = db->ExecuteSelect(string(/*"PRAGMA journal_mode = WAL; */"PRAGMA encoding = \"UTF-8\"; "
                                                       "PRAGMA foreign_keys = 1; PRAGMA page_size = " + std::to_string(blockOrClusterSize) + "; PRAGMA cache_size = -3000;").c_str());
+    res->ReleaseStatement();
 
     last_ping_ = boost::posix_time::microsec_clock::local_time();
 
@@ -438,7 +439,7 @@ void CClientSession::do_read()
 
     post_check_ping();
 
-    sock_.async_receive(buffer(read_buffer_.get(), MAX_READ_BUFFER), 0,
+    async_read(sock_, buffer(read_buffer_.get(), MAX_READ_BUFFER), boost::asio::transfer_at_least(1),
                         bind(&CClientSession::on_read, shared_from_this(), _1, _2));
 
 }
