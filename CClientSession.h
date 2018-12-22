@@ -122,6 +122,8 @@ private:
 
     businessLogic_ptr businessLogic_;
     CBinaryFileReader backupReader_;
+
+    void do_restore_db();
 };
 
 #endif //CS_MINISQLITESERVER_CCLIENTSESSION_H
