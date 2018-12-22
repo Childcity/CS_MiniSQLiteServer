@@ -38,7 +38,7 @@ void CClientSession::start()
         timer.wait();
     });
     LOG_IF(WARNING, ! db->OpenConnection()) << "ERROR: can't connect to db: " <<db->GetLastError();
-    IResult *res = db->ExecuteSelect(string(/*"PRAGMA journal_mode = WAL; */"PRAGMA encoding = \"UTF-8\"; "
+    IResult *res = db->ExecuteSelect(string("PRAGMA journal_mode = WAL; PRAGMA encoding = \"UTF-8\"; "
                                                       "PRAGMA foreign_keys = 1; PRAGMA page_size = " + std::to_string(blockOrClusterSize) + "; PRAGMA cache_size = -3000;").c_str());
     res->ReleaseStatement();
 
@@ -115,7 +115,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 
         // we must make copy of read_buffer_, for quick unlock cs_ mutex
         size_t len = strlen(read_buffer_.get()) - sizeEndOfMsg;
-        //LOG_IF(INFO,(len <7)||len>max_msg) <<"LENGH: " <<len <<" "<<read_buffer_.get();
+
         if((len < 7)||(len > MAX_READ_BUFFER))
             len = 1;
 
@@ -123,7 +123,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
         size_t cleanMsgSize = 0;
         {
             boost::recursive_mutex::scoped_lock lk(cs_);
-            for (size_t i=0; i < inMsg.size(); ++i) {
+            for (size_t i = 0; i < inMsg.size(); ++i) {
                 //continue if read_buffer_[i] == one of (\r, \n, NULL)
                 if((read_buffer_[i] != char(0)) && (read_buffer_[i] != char(13))  && (read_buffer_[i] != char(10)))
                     inMsg[cleanMsgSize++] = read_buffer_[i];
@@ -163,45 +163,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
             }
 
         }else if(0 == inMsg.find(u8"restore_db")){
-            string msg;
-            int progress = businessLogic_->getBackUpProgress();
-
-            if(progress > -1 && progress <100){
-                msg = "Restore can't be executed. Backup in progress [" + std::to_string(progress) + "%]";
-                LOG(INFO) <<msg;
-            }else{
-                if(! businessLogic_->prepareBeforeRestore(dbPath, restoreDbPath)){
-                    msg = "Restore can't be executed. System error or restore db corrupted";
-                }else{
-                    auto self = shared_from_this();
-                    cli_ptr_vector clients_copy;
-                    {
-                        boost::recursive_mutex::scoped_lock lk(clients_cs);
-                        clients_copy = clients;
-                    }
-
-                    for(const auto &it : clients_copy )
-                        if(it != self)
-                            it->stop();
-
-                    io_context_.post([self, this](){ //async call
-                        // wait, before all existing call to db will be complete, and clients go away
-                        deadline_timer timer(io_context_);
-                        timer.expires_from_now(boost::posix_time::millisec(5000));
-                        timer.wait();
-
-                        businessLogic_->restoreDbFromFile(dbPath, restoreDbPath);
-                        stop();
-                        return;
-                        //do_write("restore db complite [100%]");
-                        //businessLogic_->resetRestoreProgress();
-                    });
-
-                    msg = "restore db in progress [0%]";
-                }
-            }
-
-            do_write(msg);
+            do_restore_db();
 
         }else if(0 == inMsg.find(u8"backup_db")){
             auto self = shared_from_this();
@@ -257,7 +219,7 @@ void CClientSession::on_login(const string &msg)
     VLOG(1) << "DEBUG: logged in: " << username_ << std::endl;
 
     do_write(string("login ok\n"));
-    //update_clients_changed();
+    //update_clients_changed(); // this caused bug with dead lock when restore or backup db, I didn't tested fixed it or not
 }
 
 void CClientSession::on_ping()
@@ -569,6 +531,48 @@ void CClientSession::do_get_db_backup() {
     }
 
     do_backup_chunk_write();
+}
+
+void CClientSession::do_restore_db() {
+    string msg;
+    int progress = businessLogic_->getBackUpProgress();
+
+    if(progress > -1 && progress < 100){
+        msg = "Restore can't be executed. Backup in progress [" + std::to_string(progress) + "%]";
+        LOG(INFO) <<msg;
+    }else{
+        if(! businessLogic_->prepareBeforeRestore(dbPath, restoreDbPath)){
+            msg = "Restore can't be executed. System error or restore db corrupted";
+        }else{
+            auto self = shared_from_this();
+            cli_ptr_vector clients_copy;
+            {
+                boost::recursive_mutex::scoped_lock lk(clients_cs);
+                clients_copy = clients;
+            }
+
+            // stop all clients except current
+            for(const auto &it : clients_copy ){
+                if(it != self)
+                    it->stop();
+            }
+
+            io_context_.post([self, this](){ //async call
+                // wait, before all existing call to db will be complete, and clients go away
+                deadline_timer timer(io_context_);
+                timer.expires_from_now(boost::posix_time::millisec(5000));
+                timer.wait();
+
+                businessLogic_->restoreDbFromFile(dbPath, restoreDbPath);
+                stop(); // stopping current client
+                return;
+            });
+
+            msg = "Restore db in progress [0%]";
+        }
+    }
+
+    do_write(msg);
 }
 
 void update_clients_changed()
