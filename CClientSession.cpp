@@ -293,6 +293,7 @@ void CClientSession::on_fibo(const string &msg)
     in.ignore(5);
     size_t n;
     in >> n;
+
     //msg.substr()
     auto self = shared_from_this();
     io_context_.post([self, this, &n](){ do_get_fibo(n); });
