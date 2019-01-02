@@ -6,7 +6,7 @@
 //#define GOOGLE_STRIP_LOG 0 // cut all glog strings from .exe
 
 #include <string>
-#include <boost/thread/pthread/recursive_mutex.hpp>
+#include <boost/thread/recursive_mutex.hpp>
 #include "CConfig.h"
 
 extern std::string dbPath;
