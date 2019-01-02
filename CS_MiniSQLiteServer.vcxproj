@@ -145,6 +145,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CBinaryFileReader.cpp" />
+    <ClCompile Include="CBusinessLogic.cpp" />
     <ClCompile Include="CClientSession.cpp" />
     <ClCompile Include="CConfig.cpp" />
     <ClCompile Include="CRunAsync.cpp" />
@@ -157,6 +159,8 @@
     <ClCompile Include="Service.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CBinaryFileReader.h" />
+    <ClInclude Include="CBusinessLogic.h" />
     <ClInclude Include="CClientSession.h" />
     <ClInclude Include="CConfig.h" />
     <ClInclude Include="CRunAsync.h" />

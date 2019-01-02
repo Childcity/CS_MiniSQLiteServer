@@ -17,7 +17,7 @@
 #include <utility>
 #include <boost/asio.hpp>
 #include <boost/shared_ptr.hpp>
-#include <boost/thread/pthread/recursive_mutex.hpp>
+#include <boost/thread/recursive_mutex.hpp>
 #include <mutex>
 
 using std::string;
