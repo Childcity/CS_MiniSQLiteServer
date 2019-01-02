@@ -419,8 +419,8 @@ void CBusinessLogic::selectPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &
 
         //check, if return data is number
         if(result != "0"){
-            size_t num = std::strtoull(result.c_str(), nullptr, 10 ); //this func return 0 if can't convert to size_t
-            if(num <= 0 || num == ULONG_MAX){
+            long long num = std::strtoull(result.c_str(), nullptr, 10 ); //this func return 0 if can't convert to size_t
+            if(num <= 0 || num == std::numeric_limits<long long>::max()){
                 errorMsg = "can't convert '" + result + "' to number!";
                 LOG(WARNING) << "BUSINESS_LOGIC: " << errorMsg;
                 throw BusinessLogicError(errorMsg);
@@ -430,7 +430,7 @@ void CBusinessLogic::selectPlaceFree(const CSQLiteDB::ptr &dbPtr, const string &
 
         //exclusive access to data!
         boost::unique_lock<boost::shared_mutex> lock(business_logic_mtx_);
-        placeFree_ = result;
+        placeFree_ = std::move(result);
     }
 }
 
