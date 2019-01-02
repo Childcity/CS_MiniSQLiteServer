@@ -28,13 +28,13 @@ int service_register(DWORD argc, LPTSTR argv[], const LPTSTR serviceName_)
 	*/
 	if ((! service_argc) && (! service_argv)) {
 		service_argc = argc;
-		service_argv = cpy_cstr_list(argc, argv);
+		service_argv = cpy_cstr_list(static_cast<size_t>(argc), argv);
 	}
 
     int ret = StartServiceCtrlDispatcher(ServiceTable);
 
 	if (service_argc && service_argv) {
-		for (size_t i = 0; i < argc; i++) {
+		for (DWORD i = 0; i < argc; i++) {
 			delete[] service_argv[i];
 		}
 		delete service_argv;

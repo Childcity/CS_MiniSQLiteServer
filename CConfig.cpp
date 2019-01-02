@@ -25,7 +25,6 @@ CConfig::KeyBindings::KeyBindings(const string exePath)
 	ipAdress = "127.0.0.1";
 	port = 65043;
 	threads = 10;
-    countOfEttempts = 200;
     timeoutToDropConnection = 5 * 60 * 1000; //5 min
 
 	logDir = exeFolderPath_ + "logs";
@@ -159,7 +158,6 @@ void CConfig::updateKeyBindings() {
 		keyBindings.stopLoggingIfFullDisk = settings.GetBoolean("LogSettings", "StopLoggingIfFullDisk", false);
 		keyBindings.verbousLog = settings.GetInteger("LogSettings", "DeepLogging", 0L);
 		keyBindings.minLogLevel = settings.GetInteger("LogSettings", "MinLogLevel", 0L);
-		keyBindings.logDir = settings.Get("LogSettings", "LogDir", "_a");
 		//Service settings (only for windows)
 		keyBindings.serviceName = settings.Get("ServiceSettings", "ServiceName", "_a");
 
@@ -168,11 +166,11 @@ void CConfig::updateKeyBindings() {
 			|| keyBindings.waitTimeMillisec <= 0L
 			|| keyBindings.timeoutToDropConnection <= 0L
 			|| keyBindings.newBackupTimeoutMillisec <= 0L
-			|| keyBindings.dbPath == "_a" || keyBindings.dbPath.empty()
+			|| keyBindings.dbPath == "_a"
 			|| keyBindings.restoreDbPath == "_a"
 			|| keyBindings.bakDbPath == "_a"
-			|| keyBindings.logDir == "_a" || keyBindings.logDir.empty()
-			|| keyBindings.serviceName == "_a" || keyBindings.serviceName.empty()) {
+			|| keyBindings.logDir == "_a"
+			|| keyBindings.serviceName == "_a") {
 			//!!! This log massage go to stderr ONLY, because GLOG is not initialized yet !
 			LOG(WARNING) << "Format of settings is not correct. Trying to save settings by default...";
 			saveKeyBindings();
@@ -193,6 +191,10 @@ void CConfig::updateKeyBindings() {
 
 		if(keyBindings.bakDbPath.empty()){
 			keyBindings.bakDbPath = defaultKeyBindings.bakDbPath;
+		}
+
+		if (keyBindings.dbPath.empty()) {
+			keyBindings.dbPath = defaultKeyBindings.dbPath;
 		}
 
 		//If we |here|, settings loaded correctly and we can continue

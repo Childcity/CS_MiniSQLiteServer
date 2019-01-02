@@ -12,3 +12,5 @@ Release/*
 x64/*
 /working_exe/CS_MiniSQLiteServer.ini
 /working_exe/backup.sqlite3
+/working_exe/db.db3
+/working_exe/temp_db.sqlite3
