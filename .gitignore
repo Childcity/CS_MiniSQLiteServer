@@ -10,3 +10,5 @@ working_exe/logs/*
 Debug/*
 Release/*
 x64/*
+/working_exe/CS_MiniSQLiteServer.ini
+/working_exe/backup.sqlite3
