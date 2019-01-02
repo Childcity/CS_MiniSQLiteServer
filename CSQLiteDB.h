@@ -50,22 +50,31 @@ private:
 
 public:
 
-    virtual ~CSQLiteDB(){}
+    virtual ~CSQLiteDB();
 
     typedef shared_ptr<CSQLiteDB> ptr;
 
     /*Class factory. This method create shared pointer to CSQLiteDB.*/
     static ptr new_(string databasePath, size_t sqlEttempts = 200, size_t sqlWaitTime = 50);
 
-    bool OpenConnection();
+    bool OpenConnection(int flags = SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE);
 
     /*This Method called when SELECT sqlQuery to be excuted.
     Return RESULTSET class pointer on success else nullptr of failed*/
-    IResult *ExcuteSelect(const char *sqlQuery);
+    IResult *ExecuteSelect(const char *sqlQuery);
 
     /*This Method called when INSERT/DELETE/UPDATE sqlQuery to be excuted.
     Return int count of effected data on success*/
-    int Excute(const char *sqlQuery);
+    int Execute(const char *sqlQuery);
+
+    /*This Method for backup Db*/
+    bool BackupDb(
+            const char *zFilename,                                      /* Name of file to back up to */
+            const std::function<void(const int, const int)> &xProgress  /* Progress function to invoke */
+    );
+
+    /*Check Db on errors. If ok, return true, else return false and set last error str*/
+    bool IntegrityCheck();
 
     /*Get Last Error of excution*/
     string GetLastError();

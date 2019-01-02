@@ -1,4 +1,6 @@
 ﻿#include <boost/asio.hpp>
+#include <iostream>
+#include <fstream>
 
 #include "glog/logging.h"
 #include "sqlite3/sqlite3.h"
@@ -7,10 +9,17 @@
 #include "CSQLiteDB.h"
 #include "CServer.h"
 #include "CConfig.h"
-//#include "Service.h" //For Windows Service
+
+#ifdef WIN32
+	#include "Service.h" //For Windows Service
+#endif // WIN32
+
 
 //Global variable declared in main.h
 std::string dbPath;
+std::string bakDbPath;
+std::string restoreDbPath;
+size_t newBackupTimeout;
 size_t sqlWaitTime;
 size_t sqlCountOfAttempts;
 long blockOrClusterSize;
@@ -27,10 +36,11 @@ int main(int argc, char *argv[])
 		LOG_IF(FATAL, CConfig::Status::ERROR == cfg.getStatus()) <<"Check settings file and RESTART" ;
 
 		running_from_service = 1;
-		/*if( service_register((LPWSTR)cfg.keyBindings.serviceName.c_str()) )
+#ifdef WIN32
+		if( service_register(argc, argv, (LPSTR)cfg.keyBindings.serviceName.c_str()) )
 		{
 			VLOG(1) << "DEBUG: We've been called as a service. Register service and exit this thread.";
-			*//* We've been called as a service. Register service
+			/* We've been called as a service. Register service
 			* and exit this thread. main() would be called from
 			* service.c next time.
 			*
@@ -39,9 +49,10 @@ int main(int argc, char *argv[])
 			* That is why we should set running_from_service
 			* before calling service_register and unset it
 			* afterwards.
-			*//*
+			*/
 			return 0;
-		}*/
+		}
+#endif // WIN32
 
 		LOG(INFO) <<"Started as console application";
 
@@ -56,6 +67,9 @@ int main(int argc, char *argv[])
         TestSqlite3Settings(&cfg);
 
         dbPath = cfg.keyBindings.dbPath;
+        bakDbPath = cfg.keyBindings.bakDbPath;
+		restoreDbPath = cfg.keyBindings.restoreDbPath;
+		newBackupTimeout = static_cast<size_t>(cfg.keyBindings.newBackupTimeoutMillisec);
         blockOrClusterSize = cfg.keyBindings.blockOrClusterSize;
         sqlWaitTime = static_cast<size_t>(cfg.keyBindings.waitTimeMillisec);
         sqlCountOfAttempts = static_cast<size_t>(cfg.keyBindings.countOfEttempts);
@@ -76,21 +90,42 @@ int main(int argc, char *argv[])
 	} catch(std::exception &e) {
 		LOG(FATAL) << "Server has been crashed: " << e.what() << std::endl;
 	}
-
 	return 0;
 }
 
 void TestSqlite3Settings(CConfig *cfg){
 
     VLOG(1) <<"DEBUG: sqlite version: " <<sqlite3_version;
-	VLOG(1) <<"DEBUG: using db: " <<cfg->keyBindings.dbPath;
+    LOG(INFO) <<"Using db: " <<cfg->keyBindings.dbPath;
+    LOG(INFO) <<"Using db backup file: " <<cfg->keyBindings.bakDbPath;
+
+	std::ofstream testFile(cfg->keyBindings.bakDbPath, std::ios::in |std::ios::out | std::ios::app | std::ios::binary);
+	LOG_IF(FATAL, ! testFile.is_open()) <<"Can't open backup file! (Check permission)";
+	testFile.close();
 
     LOG_IF(FATAL, sqlite3_threadsafe() == 0 ) <<"Sqlite compiled without 'threadsafe' mode";
 
     CSQLiteDB::ptr db = CSQLiteDB::new_(cfg->keyBindings.dbPath);
-	LOG_IF(FATAL, ! db->OpenConnection()) <<"Can't connect to '" << cfg->keyBindings.dbPath << "', check permission or file does not exist: " << db->GetLastError();
+	LOG_IF(FATAL, ! db->OpenConnection()) <<"Can't connect to '" << cfg->keyBindings.dbPath << "', check permission or file does not exist. System error: " << db->GetLastError();
 
-	VLOG(1) <<"DEBUG: connection to db checked - everything is OK";
+	// check tmp db or create new
+	CBusinessLogic::CreateOrUseOldTmpDb();
+
+    LOG(INFO) <<"Connection to db and tmp db: Ok";
+
+
+	VLOG(1) <<"DEBUG: integrity checking...";
+	if(! db->IntegrityCheck()){
+        LOG(WARNING)  << "Integrity check failed on " << cfg->keyBindings.dbPath
+                      <<"\n" <<db->GetLastError();
+	}else{
+        LOG(INFO) <<"Integrity check: OK";
+	}
+
+
+	VLOG(1) <<"DEBUG: synchronization main db with tmp db...";
+	CBusinessLogic::SyncDbWithTmp(cfg->keyBindings.dbPath, [=](size_t ms) { (void)ms; /*here we shouldn't sleep, just skip it*/ });
+    LOG(INFO) <<"Synchronization: OK";
 }
 
 void SafeExit()
