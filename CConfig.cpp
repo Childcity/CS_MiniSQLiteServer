@@ -109,12 +109,12 @@ void CConfig::initGlog()
 	FLAGS_v = static_cast<google::int32>(keyBindings.verbousLog);
 	FLAGS_minloglevel = static_cast<google::int32>(keyBindings.minLogLevel);
 
-	google::InstallFailureSignalHandler();
-
 	#ifdef WIN32
 	CreateDirectoryW(ConverterUTF8_UTF16<std::string, std::wstring>(keyBindings.logDir).c_str(), NULL);
 	CreateDirectoryW(ConverterUTF8_UTF16<std::string, std::wstring>(newFolder).c_str(), NULL);
 	#else
+	google::InstallFailureSignalHandler();
+
 		int ret = mkdir(keyBindings.logDir.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
 		if ((0 != ret) && (EEXIST != errno)) {
 			//log directory not exist or permission denied or other error
