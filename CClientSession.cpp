@@ -19,6 +19,8 @@ CClientSession::CClientSession(io_context &io_context, const size_t maxTimeout,
         , businessLogic_(std::move(businessLogic))
 {}
 
+CClientSession::~CClientSession() { /*VLOG(1) << "DEBUG: ~CClientSession()";*/ }
+
 void CClientSession::start()
 {
     started_ = true;
@@ -61,11 +63,18 @@ void CClientSession::stop()
         if( !started_ )
             return;
 
-        VLOG(1) << "DEBUG: stop client: " << username() << std::endl;
+        VLOG(1) << "DEBUG: stop client: " << username();
 
         started_ = false;
-        sock_.close();
+        sock_.cancel();
+        //There is a bug: https://svn.boost.org/trac10/ticket/7611#no1
+        //so in multithread mode we mustn't stop socket, because asio in some time can run async_read/write on socket exactly when we close socket
+        //and OS send SIGSEGV to server :(
+        //To prevent SIGSEGV, I don't close socket. Socket will be closed automaticaly, after destructor CClientSession::~CClientSession()
+        //sock_.close();
     }
+
+    VLOG(1) << "DEBUG: socket was stopped for client: " << username();
 
     ptr self = shared_from_this();
 
@@ -137,7 +146,7 @@ void CClientSession::on_read(const error_code &err, size_t bytes)
 
         if(businessLogic_->isRestoreExecuting()){
             VLOG(1) <<"DEBUG: Server is busy at the moment. ";
-            do_write("Server is busy at the moment. Database restore progress [" + std::to_string(businessLogic_->getRestoreProgress()) + "%]");
+            do_write("Server is busy at the moment. Database restore progress [" + std::to_string(businessLogic_->getRestoreProgress()) + "%]", false);
             stop();
 
         }else if(0 == inMsg.find(u8"UPDATE Config SET PlaceFree")){
@@ -269,11 +278,6 @@ void CClientSession::post_check_ping()
     timer_.async_wait(bind(&CClientSession::on_check_ping, shared_from_this()));
 }
 
-void CClientSession::on_write(const error_code &err, size_t bytes)
-{
-    do_read();
-}
-
 void CClientSession::do_get_fibo(const size_t &n)
 {
     //return n<=2 ? n: get_fibo(n-1) + get_fibo(n-2);
@@ -284,7 +288,7 @@ void CClientSession::do_get_fibo(const size_t &n)
         a = b; b = c;
     }
 
-    do_write(string("fibo: " + std::to_string(b) + "\n"));
+    do_write(string("fibo: " + std::to_string(b) + "\n"), false);
 }
 
 void CClientSession::on_fibo(const string &msg)
@@ -375,7 +379,7 @@ void CClientSession::do_ask_db(string &query)
     }
 
     //VLOG(1) <<(int)answer[0]<<(int)answer[1];
-    do_write(answer);
+    do_write(answer, false);
 }
 
 void CClientSession::on_query(const string &msg)
@@ -406,7 +410,8 @@ void CClientSession::do_read()
 
 }
 
-void CClientSession::do_write(const string &msg)
+
+void CClientSession::do_write(const string &msg, bool read_on_write)
 {
     if( !started() )
         return;
@@ -418,8 +423,15 @@ void CClientSession::do_write(const string &msg)
 
     std::copy(msg.begin(), msg.end(), write_buffer_.get());
 
+    auto self(shared_from_this());
+
     async_write(sock_, buffer(write_buffer_.get(), msg.size()),
-                           bind(&CClientSession::on_write, shared_from_this(), _1, _2));
+                [this, self, read_on_write](error_code, size_t){
+                    if(read_on_write){
+                        do_read();
+                    }
+                });
+
 }
 
 void CClientSession::do_db_backup() {
@@ -439,6 +451,8 @@ void CClientSession::do_db_backup() {
         //this will be executed after backup is finished with error
         msg = "ERROR: db was not backuped: " + db->GetLastError();
         LOG(WARNING) << msg;
+        do_write(msg, false);
+        return;
     }else if(100 == backUpStatus){
         businessLogic_->setTimeoutOnNextBackupCmd(io_context_, newBackupTimeout);
 
@@ -539,10 +553,11 @@ void CClientSession::do_restore_db() {
 
     if(progress > -1 && progress < 100){
         msg = "Restore can't be executed. Backup in progress [" + std::to_string(progress) + "%]";
-        LOG(INFO) <<msg;
+        LOG(WARNING) <<msg;
     }else{
         if(! businessLogic_->prepareBeforeRestore(dbPath, restoreDbPath)){
             msg = "Restore can't be executed. System error or restore db corrupted";
+            LOG(WARNING) <<msg;
         }else{
             auto self = shared_from_this();
             cli_ptr_vector clients_copy;
@@ -569,6 +584,7 @@ void CClientSession::do_restore_db() {
             });
 
             msg = "Restore db in progress [0%]";
+            LOG(INFO) <<msg;
         }
     }
 

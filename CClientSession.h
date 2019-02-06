@@ -33,8 +33,9 @@ private:
 	using businessLogic_ptr = boost::shared_ptr<CBusinessLogic>;
 
     explicit CClientSession(io_context &io_context, size_t maxTimeout, businessLogic_ptr businessLogic);
-
 public:
+
+    virtual ~CClientSession();
 
 	typedef boost::shared_ptr<CClientSession> ptr;
 
@@ -73,8 +74,6 @@ private:
 
 	void post_check_ping();
 
-	void on_write(const error_code &err, size_t bytes);
-
     void on_backup_chunk_write(const CClientSession::error_code &err, size_t bytes);
 
 		void do_get_fibo(const size_t &n);
@@ -87,7 +86,7 @@ private:
 
 	void do_read();
 
-	void do_write(const string &msg);
+	void do_write(const string &msg, bool read_on_write = true);
 
 	void do_backup_chunk_write();
 
